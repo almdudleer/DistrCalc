@@ -2,36 +2,30 @@
 // Created by almdudler on 17.04.2020.
 //
 
-#include <errno.h>
-#include <unistd.h>
 #include <string.h>
-#include "utils.h"
-#include "ipc.h"
-#include <time.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <malloc.h>
-#include "Self.h"
+#include <self.h>
 
-void Self_clear_mask(Self* self){
+void Self_clear_mask(Self *self) {
     for (int i = 0; i < self->n_nodes; i++) {
         self->read_mask[i] = 1;
     }
 }
 
-void Self_new(Self* self, int lid, int n_nodes, int*** pipes) {
+void Self_new(Self *self, int lid, int n_nodes, int ***pipes) {
     self->pipes = pipes;
     self->n_nodes = n_nodes;
     self->lid = lid;
-    self->read_mask = malloc(self->n_nodes*sizeof(char));
+    self->read_mask = malloc(self->n_nodes * sizeof(char));
     Self_clear_mask(self);
 }
 
-void Self_destruct(Self* self) {
+void Self_destruct(Self *self) {
     free(self->read_mask);
 }
 
-void print_pipes(int*** pipes, int n_nodes) {
+void print_pipes(int ***pipes, int n_nodes) {
     for (int from = 1; from < n_nodes; from++) {
         for (int to = 0; to < n_nodes; to++) {
             for (int is_write = 0; is_write < 2; is_write++) {
@@ -42,7 +36,7 @@ void print_pipes(int*** pipes, int n_nodes) {
     }
 }
 
-void free_pipes(int*** data, size_t xlen, size_t ylen) {
+void free_pipes(int ***data, size_t xlen, size_t ylen) {
     size_t i, j;
 
     for (i = 0; i < xlen; ++i) {
@@ -55,8 +49,8 @@ void free_pipes(int*** data, size_t xlen, size_t ylen) {
     free(data);
 }
 
-int*** alloc_pipes(size_t xlen, size_t ylen, size_t zlen) {
-    int*** p;
+int ***alloc_pipes(size_t xlen, size_t ylen, size_t zlen) {
+    int ***p;
     size_t i, j;
 
     if ((p = malloc(xlen * sizeof *p)) == NULL) {

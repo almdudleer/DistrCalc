@@ -2,9 +2,8 @@
 #include <errno.h>
 #include <asm/errno.h>
 #include "ipc.h"
-#include "Self.h"
+#include "self.h"
 #include <fcntl.h>
-
 
 
 int send(void* self, local_id dst, const Message* msg) {
@@ -25,7 +24,7 @@ int send_multicast(void* self, const Message* msg) {
     Self* me = self;
     for (int to = 0; to < me->n_nodes; to++) {
         if (to == me->lid) continue;
-        if (send(me, to, msg) < 0) {
+        if (send(me, (local_id) to, msg) < 0) {
             return -1;
         }
     }
@@ -60,7 +59,7 @@ int receive_any(void* self, Message* msg) {
             continue;
         }
 
-        if (receive(me, from, msg) < 0) {
+        if (receive(me, (local_id) from, msg) < 0) {
             if (errno == EAGAIN) continue;
             else return -1;
         } else {

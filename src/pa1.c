@@ -6,7 +6,7 @@
 #include "pa1.h"
 #include "ipc.h"
 #include "utils.h"
-#include "Self.h"
+#include "self.h"
 #include "common.h"
 
 void child_main(Self* self, FILE* events_log_file) {
@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
     n_processes += 1;
     if (n_processes < 2) exit(EXIT_FAILURE);
 
-    int*** pipes = alloc_pipes(n_processes, n_processes, 2);
+    int*** pipes = alloc_pipes((size_t) n_processes, (size_t) n_processes, 2);
 
     FILE* events_log_file = fopen(events_log, "w");
     FILE* pipes_log_file = fopen(pipes_log, "w");
@@ -120,6 +120,7 @@ int main(int argc, char** argv) {
                 close_bad_pipes(&self, n_processes, pipes);
                 child_main(&self, events_log_file);
             }
+            default: { }
         }
     }
     Self self;

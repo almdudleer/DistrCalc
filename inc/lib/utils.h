@@ -5,7 +5,7 @@
 #ifndef PA1_UTILS_H
 #define PA1_UTILS_H
 
-#include "Self.h"
+#include "self.h"
 #include <stdio.h>
 
 #define EVENTS_FILE_NAME "events.log"

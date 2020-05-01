@@ -10,7 +10,7 @@
 typedef struct {
     int*** pipes;
     int n_nodes;
-    local_id lid;
+    int lid;
     char* read_mask;
 } Self;
 

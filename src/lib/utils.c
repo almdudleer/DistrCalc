@@ -3,7 +3,7 @@
 #include <time.h>
 #include "ipc.h"
 #include "utils.h"
-#include "Self.h"
+#include "self.h"
 #include "pa1.h"
 #include <string.h>
 #include <unistd.h>
@@ -78,12 +78,12 @@ int write_nonblock(int fd, char* msg, unsigned long n_bytes) {
 }
 
 void create_msg(Message* msg, MessageType type, char* payload) {
-    timestamp_t current_time = time(NULL);
+    timestamp_t current_time = (timestamp_t) time(NULL);
 
     MessageHeader header;
     header.s_magic = MESSAGE_MAGIC;
     header.s_local_time = current_time;
-    header.s_payload_len = strlen(payload);
+    header.s_payload_len = (uint16_t) strlen(payload);
     header.s_type = type;
     msg->s_header = header;
     sprintf(msg->s_payload, "%s", payload);
