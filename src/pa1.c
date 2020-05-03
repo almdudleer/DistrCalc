@@ -8,14 +8,16 @@
 #include "utils.h"
 #include "self.h"
 #include "common.h"
+#include "string.h"
 
 void child_main(Unit* self, FILE* events_log_file) {
     char log_text[MAX_PAYLOAD_LEN];
     Message* msg = malloc(sizeof(Message));
 
     // send started
-    create_log_text(log_text, log_started_fmt, self->lid, getpid(), getppid());
-    create_msg(msg, STARTED, log_text);
+    timestamp_t time = get_physical_time();
+    create_log_text(log_text, log_started_fmt, time, self->lid, getpid(), getppid());
+    create_msg(msg, STARTED, log_text, strlen(log_text));
 
     if (send_multicast(self, msg) != 0) {
         perror("send_multicast");
@@ -37,8 +39,9 @@ void child_main(Unit* self, FILE* events_log_file) {
 //    sleep(5);
 
     // send done
-    create_log_text(log_text, log_done_fmt, self->lid);
-    create_msg(msg, DONE, log_text);
+    time = get_physical_time();
+    create_log_text(log_text, log_done_fmt, time, self->lid);
+    create_msg(msg, DONE, log_text, strlen(log_text));
 
     if (send_multicast(self, msg) < 0) {
         perror("send_multicast");
@@ -90,7 +93,7 @@ int main(int argc, char** argv) {
 
     for (local_id lid = 1; lid < (local_id) n_processes; lid++) {
         Unit self;
-        Unit_new(&self, lid, n_processes, pipes);
+        Unit_new(&self, lid, n_processes, pipes, 5);
 
         switch (fork()) {
             case -1: {
@@ -105,7 +108,7 @@ int main(int argc, char** argv) {
         }
     }
     Unit self;
-    Unit_new(&self, PARENT_ID, n_processes, pipes);
+    Unit_new(&self, PARENT_ID, n_processes, pipes, 5);
     close_bad_pipes(&self, n_processes, pipes);
 
     receive_all(&self, STARTED, events_log_file);

@@ -13,11 +13,12 @@ void Unit_clear_mask(Unit *self) {
     }
 }
 
-void Unit_new(Unit *self, int lid, int n_nodes, int ***pipes) {
+void Unit_new(Unit *self, int lid, int n_nodes, int ***pipes, balance_t balance) {
     self->pipes = pipes;
     self->n_nodes = n_nodes;
     self->lid = lid;
     self->read_mask = malloc(self->n_nodes * sizeof(char));
+    self->balance = balance;
     Unit_clear_mask(self);
 }
 

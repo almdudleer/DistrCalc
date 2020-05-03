@@ -18,7 +18,7 @@ typedef enum UNIT_TYPE {
 struct Unit {
     int*** pipes;
     int n_nodes;
-    int lid;
+    local_id lid;
     char* read_mask;
     balance_t balance;
 
@@ -26,9 +26,14 @@ struct Unit {
     UNIT_TYPE unit_type;
 };
 
+typedef struct Client {
+    int*** pipes;
+    local_id lid;
+} Client;
+
 void Unit_clear_mask(Unit* self);
 
-void Unit_new(Unit* self, int lid, int n_nodes, int*** pipes);
+void Unit_new(Unit *self, int lid, int n_nodes, int ***pipes, balance_t balance);
 
 // 3d array operations
 void print_pipes(int*** pipes, int n_nodes);

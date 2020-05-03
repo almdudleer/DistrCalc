@@ -8,7 +8,8 @@
 #include "self.h"
 #include <stdio.h>
 
-#define EVENTS_FILE_NAME "events.log"
+#define WAIT_TIME_NS 200000000
+#define TIMEOUT_NS 2000000000
 
 // write syscall utility
 int write_nonblock(int fd, char* msg, unsigned long n_bytes);
@@ -17,7 +18,7 @@ int write_nonblock(int fd, char* msg, unsigned long n_bytes);
 int receive_all(Unit* self, MessageType type, FILE* events_log_file);
 
 // message constructor
-void create_msg(Message* msg, MessageType type, char* payload);
+void create_msg(Message *msg, MessageType type, void *payload, size_t payload_len);
 
 // log utils
 void create_log_text(char* msg_text, const char* format, ...);

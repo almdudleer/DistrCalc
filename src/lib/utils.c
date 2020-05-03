@@ -1,25 +1,19 @@
-#include "banking.h"
+#include <pa2345.h>
 #include <bits/types/FILE.h>
 #include <inc/lib/self.h>
-#include "common.h"
-#include <getopt.h>
-#include <sys/wait.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <malloc.h>
 #include <time.h>
 #include "ipc.h"
 #include "utils.h"
-#include "self.h"
-#include "pa1.h"
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 
-
-int receive_all(Unit* self, MessageType type, FILE* events_log_file) {
+int receive_all(Unit *self, MessageType type, FILE *events_log_file) {
     char log_text[MAX_PAYLOAD_LEN];
-    const char* log_fmt;
+    const char *log_fmt;
     switch (type) {
         case DONE:
             log_fmt = log_received_all_done_fmt;
@@ -31,20 +25,26 @@ int receive_all(Unit* self, MessageType type, FILE* events_log_file) {
             log_fmt = "Event of type %d";
 
     }
-    create_log_text(log_text, log_fmt, self->lid);
+    timestamp_t time = get_physical_time();
+    create_log_text(log_text, log_fmt, time, self->lid);
 
-    Message* incoming_msg = malloc(sizeof(Message));
+    Message *incoming_msg = malloc(sizeof(Message));
 
+    struct timespec tw = {0, WAIT_TIME_NS};
+    struct timespec tr;
+    unsigned long long timeout_ns = TIMEOUT_NS;
 
     int n_received = self->n_nodes - 2;
-//    int timeout = 1000;
     while (n_received != 0) {
 //        if (timeout <= 0) return -1;
         if (receive_any(self, incoming_msg) < 0) {
             if (errno == EAGAIN) {
-                sleep(1);
-//                timeout--;
-//                printf("sleep %d\n", self->lid);
+                nanosleep(&tw, &tr);
+                timeout_ns -= WAIT_TIME_NS;
+                if (timeout_ns <= 0) {
+                    fprintf(stderr, "timeout exceeded\n");
+                    exit(EXIT_FAILURE);
+                }
                 continue;
             } else {
                 perror("receive_any");
@@ -66,7 +66,7 @@ int receive_all(Unit* self, MessageType type, FILE* events_log_file) {
     return 0;
 }
 
-int write_nonblock(int fd, char* msg, unsigned long n_bytes) {
+int write_nonblock(int fd, char *msg, unsigned long n_bytes) {
 //    int timeout = 1000;
     while (1) {
 //        if (timeout <= 0) return -1;
@@ -84,27 +84,27 @@ int write_nonblock(int fd, char* msg, unsigned long n_bytes) {
     }
 }
 
-void create_msg(Message* msg, MessageType type, char* payload) {
+void create_msg(Message *msg, MessageType type, void *payload, size_t payload_len) {
     timestamp_t current_time = (timestamp_t) time(NULL);
 
     MessageHeader header;
     header.s_magic = MESSAGE_MAGIC;
     header.s_local_time = current_time;
-    header.s_payload_len = (uint16_t) strlen(payload);
+    header.s_payload_len = payload_len;
     header.s_type = type;
     msg->s_header = header;
     sprintf(msg->s_payload, "%s", payload);
 
 }
 
-void create_log_text(char* msg_text, const char* format, ...) {
+void create_log_text(char *msg_text, const char *format, ...) {
     va_list args;
     va_start(args, format);
     vsprintf(msg_text, format, args);
     va_end(args);
 }
 
-void log_msg(FILE* log_file, char* msg) {
+void log_msg(FILE *log_file, char *msg) {
 
 //    log_file = fopen(events_log, "a");
 
@@ -120,36 +120,15 @@ void log_msg(FILE* log_file, char* msg) {
 
 }
 
-void close_bad_pipes(Unit* self, int n_processes, int** const* pipes) {
+void close_bad_pipes(Unit *self, int n_processes, int **const *pipes) {
     for (local_id from = 0; from < (local_id) n_processes; from++) {
         for (local_id to = 0; to < (local_id) n_processes; to++) {
             if (from != to) {
                 if ((*self).lid == to) {
                     close(pipes[from][to][1]);
-                }
-                else if ((*self).lid == from) {
+                } else if ((*self).lid == from) {
                     close(pipes[from][to][0]);
-                }
-                else {
-                    close(pipes[from][to][0]);
-                    close(pipes[from][to][1]);
-                }
-            }
-        }
-    }
-}
-
-void close_bad_pipes(Unit* self, int n_processes, int** const* pipes) {
-    for (local_id from = 0; from < (local_id) n_processes; from++) {
-        for (local_id to = 0; to < (local_id) n_processes; to++) {
-            if (from != to) {
-                if ((*self).lid == to) {
-                    close(pipes[from][to][1]);
-                }
-                else if ((*self).lid == from) {
-                    close(pipes[from][to][0]);
-                }
-                else {
+                } else {
                     close(pipes[from][to][0]);
                     close(pipes[from][to][1]);
                 }
