@@ -6,17 +6,29 @@
 #define PA1_SELF_H
 
 #include "ipc.h"
+#include "banking.h"
 
-typedef struct {
+typedef struct Unit Unit;
+
+typedef enum UNIT_TYPE {
+    K,
+    C
+} UNIT_TYPE;
+
+struct Unit {
     int*** pipes;
     int n_nodes;
     int lid;
     char* read_mask;
-} Self;
+    balance_t balance;
 
-void Self_clear_mask(Self* self);
+    BalanceHistory* balance_history;
+    UNIT_TYPE unit_type;
+};
 
-void Self_new(Self* self, int lid, int n_nodes, int*** pipes);
+void Unit_clear_mask(Unit* self);
+
+void Unit_new(Unit* self, int lid, int n_nodes, int*** pipes);
 
 // 3d array operations
 void print_pipes(int*** pipes, int n_nodes);

@@ -7,7 +7,7 @@
 
 
 int send(void* self, local_id dst, const Message* msg) {
-    Self* me = self;
+    Unit* me = self;
     if (write(me->pipes[me->lid][dst][1], msg, msg->s_header.s_payload_len + sizeof(MessageHeader)) <= 0) {
         return -1;
     }
@@ -21,7 +21,7 @@ int send(void* self, local_id dst, const Message* msg) {
 
 
 int send_multicast(void* self, const Message* msg) {
-    Self* me = self;
+    Unit* me = self;
     for (int to = 0; to < me->n_nodes; to++) {
         if (to == me->lid) continue;
         if (send(me, (local_id) to, msg) < 0) {
@@ -33,7 +33,7 @@ int send_multicast(void* self, const Message* msg) {
 
 
 int receive(void* self, local_id from, Message* msg) {
-    Self* me = self;
+    Unit* me = self;
 
     int flags;
     int fd = me->pipes[from][me->lid][0];
@@ -53,7 +53,7 @@ int receive(void* self, local_id from, Message* msg) {
 
 
 int receive_any(void* self, Message* msg) {
-    Self* me = self;
+    Unit* me = self;
     for (int from = 0; from < me->n_nodes; from++) {
         if ((from == me->lid) || (me->read_mask[from] == 0)) {
             continue;

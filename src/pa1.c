@@ -9,7 +9,7 @@
 #include "self.h"
 #include "common.h"
 
-void child_main(Self* self, FILE* events_log_file) {
+void child_main(Unit* self, FILE* events_log_file) {
     char log_text[MAX_PAYLOAD_LEN];
     Message* msg = malloc(sizeof(Message));
 
@@ -56,25 +56,6 @@ void child_main(Self* self, FILE* events_log_file) {
     exit(EXIT_SUCCESS);
 }
 
-void close_bad_pipes(Self* self, int n_processes, int** const* pipes) {
-    for (local_id from = 0; from < (local_id) n_processes; from++) {
-        for (local_id to = 0; to < (local_id) n_processes; to++) {
-            if (from != to) {
-                if ((*self).lid == to) {
-                    close(pipes[from][to][1]);
-                }
-                else if ((*self).lid == from) {
-                    close(pipes[from][to][0]);
-                }
-                else {
-                    close(pipes[from][to][0]);
-                    close(pipes[from][to][1]);
-                }
-            }
-        }
-    }
-}
-
 int main(int argc, char** argv) {
 
     int opt, n_processes = 0;
@@ -108,8 +89,8 @@ int main(int argc, char** argv) {
     fclose(pipes_log_file);
 
     for (local_id lid = 1; lid < (local_id) n_processes; lid++) {
-        Self self;
-        Self_new(&self, lid, n_processes, pipes);
+        Unit self;
+        Unit_new(&self, lid, n_processes, pipes);
 
         switch (fork()) {
             case -1: {
@@ -123,8 +104,8 @@ int main(int argc, char** argv) {
             default: { }
         }
     }
-    Self self;
-    Self_new(&self, PARENT_ID, n_processes, pipes);
+    Unit self;
+    Unit_new(&self, PARENT_ID, n_processes, pipes);
     close_bad_pipes(&self, n_processes, pipes);
 
     receive_all(&self, STARTED, events_log_file);

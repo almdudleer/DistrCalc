@@ -7,21 +7,21 @@
 #include <malloc.h>
 #include <self.h>
 
-void Self_clear_mask(Self *self) {
+void Unit_clear_mask(Unit *self) {
     for (int i = 0; i < self->n_nodes; i++) {
         self->read_mask[i] = 1;
     }
 }
 
-void Self_new(Self *self, int lid, int n_nodes, int ***pipes) {
+void Unit_new(Unit *self, int lid, int n_nodes, int ***pipes) {
     self->pipes = pipes;
     self->n_nodes = n_nodes;
     self->lid = lid;
     self->read_mask = malloc(self->n_nodes * sizeof(char));
-    Self_clear_mask(self);
+    Unit_clear_mask(self);
 }
 
-void Self_destruct(Self *self) {
+void Self_destruct(Unit *self) {
     free(self->read_mask);
 }
 

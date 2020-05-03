@@ -13,10 +13,10 @@ add_library(ipc lib/ipc.c ../inc/lib/ipc.h)
 add_library(self lib/self.c ../inc/lib/self.h)
 
 # pa2 libs
-add_library(banking lib/banking.c lib/bank_robbery.c ../inc/lib/banking.h)
+add_library(banking lib/bank_robbery.c ../inc/lib/banking.h)
 
 # executables
-add_executable(pa1 ../inc/pa1.h pa1.c ../inc/common.h)
+add_executable(pa1 ../inc/pa1.h pa1.c)
 add_executable(pa2 ../inc/pa2345.h pa23.c)
 
 target_link_libraries(pa1 utils ipc self)

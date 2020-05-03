@@ -1,3 +1,10 @@
+#include "banking.h"
+#include <bits/types/FILE.h>
+#include <inc/lib/self.h>
+#include "common.h"
+#include <getopt.h>
+#include <sys/wait.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <malloc.h>
 #include <time.h>
@@ -10,7 +17,7 @@
 #include <errno.h>
 
 
-int receive_all(Self* self, MessageType type, FILE* events_log_file) {
+int receive_all(Unit* self, MessageType type, FILE* events_log_file) {
     char log_text[MAX_PAYLOAD_LEN];
     const char* log_fmt;
     switch (type) {
@@ -53,7 +60,7 @@ int receive_all(Self* self, MessageType type, FILE* events_log_file) {
 
     log_msg(events_log_file, log_text);
 
-    Self_clear_mask(self);
+    Unit_clear_mask(self);
     free(incoming_msg);
 
     return 0;
@@ -111,4 +118,42 @@ void log_msg(FILE* log_file, char* msg) {
     }
     fflush(log_file);
 
+}
+
+void close_bad_pipes(Unit* self, int n_processes, int** const* pipes) {
+    for (local_id from = 0; from < (local_id) n_processes; from++) {
+        for (local_id to = 0; to < (local_id) n_processes; to++) {
+            if (from != to) {
+                if ((*self).lid == to) {
+                    close(pipes[from][to][1]);
+                }
+                else if ((*self).lid == from) {
+                    close(pipes[from][to][0]);
+                }
+                else {
+                    close(pipes[from][to][0]);
+                    close(pipes[from][to][1]);
+                }
+            }
+        }
+    }
+}
+
+void close_bad_pipes(Unit* self, int n_processes, int** const* pipes) {
+    for (local_id from = 0; from < (local_id) n_processes; from++) {
+        for (local_id to = 0; to < (local_id) n_processes; to++) {
+            if (from != to) {
+                if ((*self).lid == to) {
+                    close(pipes[from][to][1]);
+                }
+                else if ((*self).lid == from) {
+                    close(pipes[from][to][0]);
+                }
+                else {
+                    close(pipes[from][to][0]);
+                    close(pipes[from][to][1]);
+                }
+            }
+        }
+    }
 }
