@@ -14,19 +14,17 @@
 int receive_all(Unit *self, MessageType type, FILE *events_log_file) {
     char log_text[MAX_PAYLOAD_LEN];
     const char *log_fmt;
+    timestamp_t time = get_physical_time();
     switch (type) {
         case DONE:
-            log_fmt = log_received_all_done_fmt;
+            create_log_text(log_text, log_received_all_done_fmt, time, self->lid);
             break;
         case STARTED:
-            log_fmt = log_received_all_started_fmt;
+            create_log_text(log_text, log_received_all_started_fmt, time, self->lid);
             break;
         default:
-            log_fmt = "Event of type %d";
-
+            break;
     }
-    timestamp_t time = get_physical_time();
-    create_log_text(log_text, log_fmt, time, self->lid);
 
     Message *incoming_msg = malloc(sizeof(Message));
 

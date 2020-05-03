@@ -10,7 +10,7 @@
 #include "common.h"
 #include <pa2345.h>
 
-void await_orders(Unit *self);
+void await_orders(Unit *self, FILE *log_file);
 
 void child_main(Unit *self, FILE *events_log_file) {
     char log_text[MAX_PAYLOAD_LEN];
@@ -38,11 +38,11 @@ void child_main(Unit *self, FILE *events_log_file) {
         exit(EXIT_FAILURE);
     }
 
-    await_orders(self);
+    await_orders(self, events_log_file);
 
     // send done
     time = get_physical_time();
-    create_log_text(log_text, log_done_fmt, time, self->lid);
+    create_log_text(log_text, log_done_fmt, time, self->lid, self->balance);
     create_msg(msg, DONE, log_text, strlen(log_text));
 
     if (send_multicast(self, msg) < 0) {
@@ -66,17 +66,24 @@ int main(int argc, char **argv) {
     int opt;
     local_id n_processes = 0;
     char *endptr;
+    balance_t** balances_pointer;
+
     while ((opt = getopt(argc, argv, "p:")) != -1) {
         if (opt == 'p') {
-            n_processes = (int) strtol(optarg, &endptr, 10);
+            n_processes = (int) strtol(optarg, &endptr, 10) + 1;
+            if (n_processes < 2) {
+                fprintf(stderr, "not enough processes: %d", n_processes);
+                exit(EXIT_FAILURE);
+            }
+            balance_t* balances = malloc((n_processes)*sizeof(balance_t));
+            balances_pointer = &balances;
+            for (int i = 1; i < n_processes; i++) {
+                balances[i] = strtol(argv[optind], &endptr, 10);
+                optind++;
+            }
         } else {
             abort();
         }
-    }
-    n_processes += 1;
-    if (n_processes < 2) {
-        fprintf(stderr, "not enough processes: %d", n_processes);
-        exit(EXIT_FAILURE);
     }
 
     int ***pipes = alloc_pipes((size_t) n_processes, (size_t) n_processes, 2);
@@ -99,7 +106,7 @@ int main(int argc, char **argv) {
 
     for (local_id lid = 1; lid < (local_id) n_processes; lid++) {
         Unit self;
-        Unit_new(&self, lid, n_processes, pipes, 5);
+        Unit_new(&self, lid, n_processes, pipes, (*balances_pointer)[lid]);
 
         switch (fork()) {
             case -1: {
@@ -133,7 +140,9 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-void await_orders(Unit *self) {
+void await_orders(Unit *self, FILE *log_file) {
+    char log_text[MAX_PAYLOAD_LEN];
+
     Message *in_msg = malloc(sizeof(Message));
     Message *ack_msg = malloc(sizeof(Message));
 
@@ -151,16 +160,22 @@ void await_orders(Unit *self) {
                 timeout_ns = TIMEOUT_NS;
                 if (in_msg->s_header.s_type == TRANSFER) {
                     TransferOrder *transfer_order = (TransferOrder *) in_msg->s_payload;
-                    printf("%d got order: %d from %d to %d\n", self->lid, transfer_order->s_amount,
-                           transfer_order->s_src, transfer_order->s_dst);
                     if (transfer_order->s_src == self->lid) {
                         if (send(self, transfer_order->s_dst, in_msg) < 0) {
                             perror("send");
-                        };
+                        }
+                        timestamp_t time = get_physical_time();
+                        create_log_text(log_text, log_transfer_out_fmt, time, transfer_order->s_src,
+                                transfer_order->s_amount, transfer_order->s_dst);
+                        log_msg(log_file, log_text);
                     } else if (transfer_order->s_dst == self->lid) {
                         if (send(self, PARENT_ID, ack_msg) < 0) {
                             perror("send");
                         }
+                        timestamp_t time = get_physical_time();
+                        create_log_text(log_text, log_transfer_in_fmt, time, transfer_order->s_dst,
+                                        transfer_order->s_amount, transfer_order->s_src);
+                        log_msg(log_file, log_text);
                     } else {
                         fprintf(stderr, "Unit %d received unexpected message\n", self->lid);
                     }
