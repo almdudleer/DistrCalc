@@ -1,5 +1,5 @@
-#include "string.h"
-#include <entity.h>
+#include <string.h>
+#include "entity.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -7,8 +7,9 @@
 #include "utils.h"
 #include "common.h"
 #include "ipc_utils.h"
-#include <pa2345.h>
+#include "pa2345.h"
 #include <fcntl.h>
+#include <getopt.h>
 
 int started_left = -1, done_left = -1, history_left = -1;
 

@@ -3,10 +3,10 @@
 //
 
 #include "ipc.h"
+#include "entity.h"
 #include <string.h>
 #include <stdio.h>
 #include <malloc.h>
-#include <entity.h>
 
 // ---------------------------------------------------- MESSAGE ----------------------------------------------------- //
 

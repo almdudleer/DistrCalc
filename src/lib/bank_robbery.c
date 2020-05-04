@@ -7,7 +7,7 @@
  * Students must not modify this file!
  */
 
-#include <ipc.h>
+#include "ipc.h"
 #include "banking.h"
 
 void bank_robbery(void * parent_data, local_id max_id)
