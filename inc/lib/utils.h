@@ -11,6 +11,12 @@
 #define WAIT_TIME_NS 200000000
 #define TIMEOUT_NS 2000000000
 
+int receive_or_die(Unit* self, local_id from, Message* msg);
+
+void on_receive_one(Unit *self, MessageType type, Message *msg, FILE *log_file);
+
+void on_receive_all(Unit *self, MessageType type, FILE *log_file);
+
 // write syscall utility
 int write_nonblock(int fd, char* msg, unsigned long n_bytes);
 

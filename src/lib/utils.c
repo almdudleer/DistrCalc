@@ -11,36 +11,45 @@
 #include <unistd.h>
 #include <errno.h>
 
-int receive_all(Unit *self, MessageType type, FILE *events_log_file) {
-    char log_text[MAX_PAYLOAD_LEN];
-    const char *log_fmt;
-    timestamp_t time = get_physical_time();
-    switch (type) {
-        case DONE:
-            create_log_text(log_text, log_received_all_done_fmt, time, self->lid);
-            break;
-        case STARTED:
-            create_log_text(log_text, log_received_all_started_fmt, time, self->lid);
-            break;
-        default:
-            break;
-    }
 
-    Message *incoming_msg = malloc(sizeof(Message));
+int receive_or_die(Unit* self, local_id from, Message* msg) {
+    // set timeout
+    struct timespec tw = {0, WAIT_TIME_NS};
+    struct timespec tr;
+    unsigned long long timeout_ns = TIMEOUT_NS * 1.5;
+
+    // wait for data
+    while (1) {
+        if (receive(self, from, msg) < 0) {
+            if (errno != EAGAIN) {
+                return -1;
+            } else {
+                nanosleep(&tw, &tr);
+                timeout_ns -= WAIT_TIME_NS;
+                if (timeout_ns <= 0) {
+                    errno = EBUSY;
+                    return -1;
+                }
+            }
+        } else return 0;
+    }
+}
+
+int receive_all(Unit* self, MessageType type, FILE* events_log_file) {
+    Message* incoming_msg = malloc(sizeof(Message));
 
     struct timespec tw = {0, WAIT_TIME_NS};
     struct timespec tr;
     unsigned long long timeout_ns = TIMEOUT_NS;
 
-    int n_received = self->n_nodes - 2;
-    while (n_received != 0) {
-//        if (timeout <= 0) return -1;
+    int to_receive = self->n_nodes - 2;
+    while (to_receive != 0) {
         if (receive_any(self, incoming_msg) < 0) {
             if (errno == EAGAIN) {
                 nanosleep(&tw, &tr);
                 timeout_ns -= WAIT_TIME_NS;
                 if (timeout_ns <= 0) {
-                    fprintf(stderr, "timeout exceeded\n");
+                    fprintf(stderr, "receive_all: timeout exceeded\n");
                     exit(EXIT_FAILURE);
                 }
                 continue;
@@ -49,14 +58,12 @@ int receive_all(Unit *self, MessageType type, FILE *events_log_file) {
                 return -1;
             }
         } else {
-            n_received--;
-            if (incoming_msg->s_header.s_type != type) {
-//                printf("Unexpected message type %d\n", incoming_msg->s_header.s_type);
-            }
+            to_receive--;
+            on_receive_one(self, type, incoming_msg, events_log_file);
         }
     }
 
-    log_msg(events_log_file, log_text);
+    on_receive_all(self, type, events_log_file);
 
     Unit_clear_mask(self);
     free(incoming_msg);
@@ -64,7 +71,48 @@ int receive_all(Unit *self, MessageType type, FILE *events_log_file) {
     return 0;
 }
 
-int write_nonblock(int fd, char *msg, unsigned long n_bytes) {
+void on_receive_all(Unit* self, MessageType type, FILE* log_file) {
+    char log_text[MAX_PAYLOAD_LEN];
+    timestamp_t time = get_physical_time();
+    switch (type) {
+        case DONE:
+            create_log_text(log_text, log_received_all_done_fmt, time, self->lid);
+            log_msg(log_file, log_text);
+            break;
+        case STARTED:
+            create_log_text(log_text, log_received_all_started_fmt, time, self->lid);
+            log_msg(log_file, log_text);
+            break;
+        case BALANCE_HISTORY:
+            printf("Got all BALANCE_HISTORY");
+        default:
+            break;
+    }
+}
+
+void on_receive_one(Unit* self, MessageType type, Message* msg, FILE* log_file) {
+//    if (msg->s_header.s_type != type) {
+//         printf("Unexpected message type %d\n", msg->s_header.s_type);
+//    }
+    if (msg->s_header.s_type != type) {
+        printf("%d: bad type %d expected %d\n", self->lid, msg->s_header.s_type, type);
+    }
+
+    switch (type) {
+        case BALANCE_HISTORY: {
+            BalanceHistory bh = *((BalanceHistory*) msg->s_payload);
+            printf("BALANCE HISTORY: %d, LEN: %d\n", bh.s_id, bh.s_history_len);
+            for (int i = 0; i < bh.s_history_len; i++) {
+                printf("%d:%d:%d\n", bh.s_id, bh.s_history[i].s_time, bh.s_history[i].s_balance);
+            }
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+int write_nonblock(int fd, char* msg, unsigned long n_bytes) {
 //    int timeout = 1000;
     while (1) {
 //        if (timeout <= 0) return -1;
@@ -82,8 +130,8 @@ int write_nonblock(int fd, char *msg, unsigned long n_bytes) {
     }
 }
 
-void create_msg(Message *msg, MessageType type, void *payload, size_t payload_len) {
-    timestamp_t current_time = (timestamp_t) time(NULL);
+void create_msg(Message* msg, MessageType type, void* payload, size_t payload_len) {
+    timestamp_t current_time = get_physical_time();
 
     MessageHeader header;
     header.s_magic = MESSAGE_MAGIC;
@@ -91,18 +139,19 @@ void create_msg(Message *msg, MessageType type, void *payload, size_t payload_le
     header.s_payload_len = payload_len;
     header.s_type = type;
     msg->s_header = header;
-    sprintf(msg->s_payload, "%s", payload);
+    memcpy(msg->s_payload, payload, payload_len);
+//    sprintf(msg->s_payload, "%s", payload);
 
 }
 
-void create_log_text(char *msg_text, const char *format, ...) {
+void create_log_text(char* msg_text, const char* format, ...) {
     va_list args;
     va_start(args, format);
     vsprintf(msg_text, format, args);
     va_end(args);
 }
 
-void log_msg(FILE *log_file, char *msg) {
+void log_msg(FILE* log_file, char* msg) {
 
 //    log_file = fopen(events_log, "a");
 
@@ -118,7 +167,7 @@ void log_msg(FILE *log_file, char *msg) {
 
 }
 
-void close_bad_pipes(Unit *self, int n_processes, int **const *pipes) {
+void close_bad_pipes(Unit* self, int n_processes, int** const* pipes) {
     for (local_id from = 0; from < (local_id) n_processes; from++) {
         for (local_id to = 0; to < (local_id) n_processes; to++) {
             if (from != to) {
