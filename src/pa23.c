@@ -112,39 +112,61 @@ void send_history(Unit* self) {
         exit(EXIT_FAILURE);
     }
 
-//    printf("%d sending BALANCE_HISTORY", self->lid);
+//    printf("%d sending BALANCE_HISTORY\n", self->lid);
     Message_free(hist_msg);
 }
 
-void* receive_all(Unit* self, MessageType type) {
-    Message in_msg;
+void receive_all(Unit* self, MessageType type, Message** messages) {
+    Message* in_msg;
+    Message msg;
+    if (messages == NULL) {
+        in_msg = &msg;
+    }
     while (1) {
-        if (receive_any_or_die(self, &in_msg) == 0) {
-            switch (in_msg.s_header.s_type) {
+        if (messages != NULL) {
+            in_msg = Message_empty();
+        }
+        if (receive_any_or_die(self, in_msg) == 0) {
+            switch (in_msg->s_header.s_type) {
                 case STARTED:
                     started_left--;
-                    if (type == STARTED && started_left == 0) {
-                        started_left = -1;
-                        return NULL;
+                    if (type == STARTED) {
+                        if (messages != NULL) {
+                            messages[started_left] = in_msg;
+                        }
+                        if (started_left == 0) {
+                            started_left = -1;
+                            return;
+                        }
                     }
                     break;
                 case DONE:
                     done_left--;
-                    if (type == DONE && done_left == 0) {
-                        done_left = -1;
-                        return NULL;
+                    if (type == DONE) {
+                        if (messages != NULL) {
+                            messages[done_left] = in_msg;
+                        }
+                        if (done_left == 0) {
+                            done_left = -1;
+                            return;
+                        }
                     }
                     break;
                 case BALANCE_HISTORY:
                     history_left--;
-                    if (type == BALANCE_HISTORY && done_left == 0) {
-                        history_left = -1;
-                        return NULL;
+                    if (type == BALANCE_HISTORY) {
+                        if (messages != NULL) {
+                            messages[history_left] = in_msg;
+                        }
+                        if (history_left == 0) {
+                            history_left = -1;
+                            return;
+                        }
                     }
                     break;
                 default:
-                    fprintf(stderr,"Process %d: unexpected message type %d\n",
-                            self->lid, in_msg.s_header.s_type);
+                    fprintf(stderr, "Process %d: unexpected message type %d\n",
+                            self->lid, in_msg->s_header.s_type);
                     exit(EXIT_FAILURE);
             }
         } else {
@@ -161,14 +183,14 @@ void child_main(Unit* self, FILE* log_file) {
     history_left = -1;
 
     send_started(self, log_file);
-    receive_all(self, STARTED);
+    receive_all(self, STARTED, NULL);
     create_log_text(log_text, log_received_all_started_fmt, get_physical_time(), self->lid);
     log_msg(log_file, log_text);
 
     await_orders(self, log_file);
 
     send_done(self, log_file);
-    receive_all(self, DONE);
+    receive_all(self, DONE, NULL);
     create_log_text(log_text, log_received_all_done_fmt, get_physical_time(), self->lid);
     log_msg(log_file, log_text);
 
@@ -187,19 +209,32 @@ void parent_main(Unit* self, FILE* log_file) {
     Message* ack_msg = Message_new(ACK, NULL, 0);
 
     // Run main job
-    receive_all(self, STARTED);
+    receive_all(self, STARTED, NULL);
     create_log_text(log_text, log_received_all_started_fmt, get_physical_time(), self->lid);
     log_msg(log_file, log_text);
 
     bank_robbery(self, self->n_nodes - 1);
 //    printf("%d sending STOP: %d\n", self->lid, STOP);
     send_multicast(self, stop_msg);
-    receive_all(self, DONE);
-//    receive_all(self, BALANCE_HISTORY);
+    receive_all(self, DONE, NULL);
+
+    Message** history_messages = malloc(sizeof(Message*)*history_left);
+    receive_all(self, BALANCE_HISTORY, history_messages);
+
+    AllHistory all_history;
+    all_history.s_history_len = self->n_nodes - 1;
+    for (int i = 0; i < self->n_nodes - 1; i++) {
+        BalanceHistory bh = *((BalanceHistory*) history_messages[i]->s_payload);
+        all_history.s_history[i] = bh;
+    }
+
+    print_history(&all_history);
 
     // Clean up
     Message_free(stop_msg);
     Message_free(ack_msg);
+    //        Message_free(messages[i]);
+    free(history_messages);
 }
 
 int main(int argc, char** argv) {

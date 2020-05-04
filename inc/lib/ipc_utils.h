@@ -9,7 +9,7 @@
 #include "entity.h"
 #include "stdio.h"
 
-#define WAIT_TIME_NS 200000000
+#define WAIT_TIME_NS (200000000 / 2)
 #define TIMEOUT_NS 2000000000
 
 int receive_or_die(Unit* self, local_id from, Message* msg);
