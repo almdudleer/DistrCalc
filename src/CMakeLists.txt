@@ -16,8 +16,6 @@ add_library(self lib/self.c ../inc/lib/self.h)
 add_library(banking lib/bank_robbery.c ../inc/lib/banking.h)
 
 # executables
-add_executable(pa1 ../inc/pa1.h pa1.c)
 add_executable(pa2 ../inc/pa2345.h pa23.c)
 
-target_link_libraries(pa1 utils ipc self)
-target_link_libraries(pa2 utils ipc self banking "/home/almdudleer/Studies/DistCalc/pas/libruntime.so")
+target_link_libraries(pa2 utils ipc entity banking "/home/almdudleer/Studies/DistCalc/pas/libruntime.so")
