@@ -2,15 +2,18 @@
 #include <errno.h>
 #include <asm/errno.h>
 #include "ipc.h"
-#include "self.h"
+#include "entity.h"
 #include <time.h>
-#include "utils.h"
+#include "ipc_utils.h"
 
 int send(void* self, local_id dst, const Message* msg) {
     Unit* me = self;
     if (write(me->pipes[me->lid][dst][1], msg, msg->s_header.s_payload_len + sizeof(MessageHeader)) <= 0) {
         return -1;
     }
+//    if (dst == PARENT_ID && msg->s_header.s_type == 0) {
+//        printf("%d sending STARTED to %d\n", me->lid, PARENT_ID);
+//    }
     return 0;
 }
 
@@ -49,25 +52,28 @@ int receive(void* self, local_id from, Message* msg) {
                         return -1;
                     }
                 }
-            } else return 0;
+            } else break;
         }
-    } else return 0;
+    }
+
+//    if (me->lid == PARENT_ID && msg->s_header.s_type == 0) {
+//        printf("%d received STARTED from %d\n", me->lid, from);
+//    }
+
+    return 0;
 }
 
 
 int receive_any(void* self, Message* msg) {
     Unit* me = self;
     for (int from = 0; from < me->n_nodes; from++) {
-        if ((from == me->lid) || (me->read_mask[from] == 0)) {
+        if (from == me->lid) {
             continue;
         }
         if (receive(me, (local_id) from, msg) < 0) {
             if (errno == EAGAIN) continue;
             else return -1;
-        } else {
-            me->read_mask[from] = 0;
-            return 0;
-        }
+        } else return 0;
     }
     return -1;
 }

@@ -9,11 +9,11 @@ include_directories(../inc/lib)
 
 # pa1 libs
 add_library(utils lib/utils.c ../inc/lib/utils.h)
-add_library(ipc lib/ipc.c ../inc/lib/ipc.h)
-add_library(self lib/self.c ../inc/lib/self.h)
+add_library(ipc lib/ipc.c ../inc/lib/ipc.h ../inc/lib/ipc_utils.h lib/ipc_utils.c)
+add_library(entity lib/entity.c ../inc/lib/entity.h)
 
 # pa2 libs
-add_library(banking lib/bank_robbery.c ../inc/lib/banking.h)
+add_library(banking lib/bank_robbery.c ../inc/lib/banking.h lib/banking.c)
 
 # executables
 add_executable(pa2 ../inc/pa2345.h pa23.c)
