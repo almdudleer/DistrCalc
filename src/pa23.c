@@ -13,6 +13,8 @@
 
 int started_left = -1, done_left = -1, history_left = -1;
 
+AllHistory allHistory;
+
 void await_orders(Unit* self, FILE* log_file) {
 
     Message* in_msg = Message_empty();
@@ -117,48 +119,39 @@ void send_history(Unit* self) {
     Message_free(hist_msg);
 }
 
-void receive_all(Unit* self, MessageType type, Message** messages) {
+void receive_all(Unit* self, MessageType type) {
     Message* in_msg;
     Message msg;
-    if (messages == NULL) {
+    if (type == BALANCE_HISTORY) {
         in_msg = &msg;
     }
     while (1) {
-        if (messages != NULL) {
+        if (type != BALANCE_HISTORY) {
             in_msg = Message_empty();
         }
         if (receive_any_or_die(self, in_msg) == 0) {
             switch (in_msg->s_header.s_type) {
                 case STARTED:
                     started_left--;
-                    if (type == STARTED) {
-                        if (messages != NULL) {
-                            messages[started_left] = in_msg;
-                        }
-                        if (started_left == 0) {
-                            started_left = -1;
-                            return;
-                        }
+                    if (type == STARTED && started_left == 0) {
+                        started_left = -1;
+                        return;
                     }
                     break;
                 case DONE:
                     done_left--;
-                    if (type == DONE) {
-                        if (messages != NULL) {
-                            messages[done_left] = in_msg;
-                        }
-                        if (done_left == 0) {
-                            done_left = -1;
-                            return;
-                        }
+                    if (type == DONE && done_left == 0) {
+                        done_left = -1;
+                        return;
                     }
                     break;
                 case BALANCE_HISTORY:
-                    history_left--;
+                    if (history_left > 0) {
+                        history_left--;
+                        allHistory.s_history[history_left] = *((BalanceHistory*) in_msg->s_payload);
+                        allHistory.s_history_len++;
+                    }
                     if (type == BALANCE_HISTORY) {
-                        if (messages != NULL) {
-                            messages[history_left] = in_msg;
-                        }
                         if (history_left == 0) {
                             history_left = -1;
                             return;
@@ -166,8 +159,8 @@ void receive_all(Unit* self, MessageType type, Message** messages) {
                     }
                     break;
                 default:
-                    fprintf(stderr, "Process %d: unexpected message type %d\n",
-                            self->lid, in_msg->s_header.s_type);
+                    fprintf(stderr, "Process %d: bad message type %d, expected %d\n",
+                            self->lid, in_msg->s_header.s_type, type);
                     exit(EXIT_FAILURE);
             }
         } else {
@@ -184,14 +177,14 @@ void child_main(Unit* self, FILE* log_file) {
     history_left = -1;
 
     send_started(self, log_file);
-    receive_all(self, STARTED, NULL);
+    receive_all(self, STARTED);
     create_log_text(log_text, log_received_all_started_fmt, get_physical_time(), self->lid);
     log_msg(log_file, log_text);
 
     await_orders(self, log_file);
 
     send_done(self, log_file);
-    receive_all(self, DONE, NULL);
+    receive_all(self, DONE);
     create_log_text(log_text, log_received_all_done_fmt, get_physical_time(), self->lid);
     log_msg(log_file, log_text);
 
@@ -210,26 +203,18 @@ void parent_main(Unit* self, FILE* log_file) {
     Message* ack_msg = Message_new(ACK, NULL, 0);
 
     // Run main job
-    receive_all(self, STARTED, NULL);
+    receive_all(self, STARTED);
     create_log_text(log_text, log_received_all_started_fmt, get_physical_time(), self->lid);
     log_msg(log_file, log_text);
 
     bank_robbery(self, self->n_nodes - 1);
 //    printf("%d sending STOP: %d\n", self->lid, STOP);
     send_multicast(self, stop_msg);
-    receive_all(self, DONE, NULL);
+    receive_all(self, DONE);
 
     Message** history_messages = malloc(sizeof(Message*)*history_left);
-    receive_all(self, BALANCE_HISTORY, history_messages);
-
-    AllHistory all_history;
-    all_history.s_history_len = self->n_nodes - 1;
-    for (int i = 0; i < self->n_nodes - 1; i++) {
-        BalanceHistory bh = *((BalanceHistory*) history_messages[i]->s_payload);
-        all_history.s_history[i] = bh;
-    }
-
-    print_history(&all_history);
+    receive_all(self, BALANCE_HISTORY);
+    print_history(&allHistory);
 
     // Clean up
     Message_free(stop_msg);
@@ -280,10 +265,14 @@ int main(int argc, char** argv) {
             }
 
             // Set read pipes to nonblock mode
-            unsigned int flags;
-            int fd = pipes[from][to][0];
-            if ((flags = fcntl(fd, F_GETFL)) < 0) return -1;
-            if (fcntl(fd, F_SETFL, flags | ((unsigned int) O_NONBLOCK)) < 0) return -1;
+            int flags1;
+            int flags2;
+            int fd1 = pipes[from][to][0];
+            int fd2 = pipes[from][to][1];
+            if ((flags1 = fcntl(fd1, F_GETFL)) < 0) return -1;
+            if ((flags2 = fcntl(fd2, F_GETFL)) < 0) return -1;
+            if (fcntl(fd1, F_SETFL, (unsigned int) flags1 | ((unsigned int) O_NONBLOCK)) < 0) return -1;
+            if (fcntl(fd2, F_SETFL, (unsigned int) flags2 | ((unsigned int) O_NONBLOCK)) < 0) return -1;
             fprintf(pipes_log_file, "pipe from %d to %d opened; read end: %d, write end: %d\n",
                     from, to, pipes[from][to][0], pipes[from][to][1]);
         }

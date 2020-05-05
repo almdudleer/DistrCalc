@@ -53,25 +53,3 @@ int receive_any_or_die(Unit* self, Message* msg) {
     }
 }
 
-void on_receive_one(Unit* self, MessageType type, Message* msg) {
-//    if (msg->s_header.s_type != type) {
-//         printf("Unexpected message type %d\n", msg->s_header.s_type);
-//    }
-    if (msg->s_header.s_type != type) {
-        printf("%d: bad message type %d expected %d\n", self->lid, msg->s_header.s_type, type);
-    }
-
-    switch (type) {
-        case BALANCE_HISTORY: {
-            BalanceHistory bh = *((BalanceHistory*) msg->s_payload);
-            printf("BALANCE HISTORY: %d, LEN: %d\n", bh.s_id, bh.s_history_len);
-            for (int i = 0; i < bh.s_history_len; i++) {
-                printf("%d:%d:%d\n", bh.s_id, bh.s_history[i].s_time, bh.s_history[i].s_balance);
-            }
-            break;
-        }
-        default:
-            break;
-    }
-}
-
