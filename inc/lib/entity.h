@@ -30,7 +30,7 @@ Unit* Unit_new(int lid, int n_nodes, int*** pipes, balance_t balance);
 
 void Unit_free(Unit* self);
 
-void Unit_set_balance(Unit *self, balance_t new_balance);
+void Unit_set_balance(Unit* self, balance_t new_balance, timestamp_t change_time);
 
 void BalanceHistory_new(BalanceHistory *self, local_id lid, balance_t init_balance);
 

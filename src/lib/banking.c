@@ -3,6 +3,7 @@
 //
 
 #include <stdlib.h>
+#include "lamp_time.h"
 #include "entity.h"
 #include "ipc_utils.h"
 
@@ -18,6 +19,7 @@ void transfer(void* parent_data, local_id src, local_id dst,
     Message* transfer_message = Message_new(TRANSFER, &transfer_order, sizeof(TransferOrder));
 
     // Initiate transfer
+    transfer_message->s_header.s_local_time = inc_lamport_time();
     if (send(self, src, transfer_message) < 0) {
         perror("send");
         exit(EXIT_FAILURE);

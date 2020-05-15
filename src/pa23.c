@@ -7,6 +7,7 @@
 #include "utils.h"
 #include "common.h"
 #include "ipc_utils.h"
+#include "lamp_time.h"
 #include "pa2345.h"
 #include <fcntl.h>
 #include <getopt.h>
@@ -28,19 +29,22 @@ void await_orders(Unit* self, FILE* log_file) {
                 local_id dst;
                 Message* msg;
                 balance_t balance_change;
-                timestamp_t time = get_physical_time();
+                timestamp_t time = inc_lamport_time();
+                timestamp_t change_time;
                 char log_text[MAX_PAYLOAD_LEN];
 
                 if (transfer_order->s_src == self->lid) {
                     dst = transfer_order->s_dst;
                     msg = in_msg;
                     balance_change = -transfer_order->s_amount;
+                    change_time = time;
                     create_log_text(log_text, log_transfer_out_fmt, time, transfer_order->s_src,
                                     transfer_order->s_amount, transfer_order->s_dst);
                 } else if (transfer_order->s_dst == self->lid) {
                     dst = PARENT_ID;
                     msg = out_msg;
                     balance_change = transfer_order->s_amount;
+                    change_time = in_msg->s_header.s_local_time;
                     create_log_text(log_text, log_transfer_in_fmt, time, transfer_order->s_dst,
                                     transfer_order->s_amount, transfer_order->s_src);
                 } else {
@@ -49,11 +53,12 @@ void await_orders(Unit* self, FILE* log_file) {
                 }
 
 //                printf("%d sending %d to %d\n", self->lid, msg->s_header.s_type, dst);
+                msg->s_header.s_local_time = time;
                 if (send(self, dst, msg) < 0) {
                     perror("send");
                     exit(EXIT_FAILURE);
                 }
-                Unit_set_balance(self, self->balance + balance_change);
+                Unit_set_balance(self, self->balance + balance_change, change_time);
                 log_msg(log_file, log_text);
             } else if (in_msg->s_header.s_type != STOP) {
                 fprintf(stderr, "Process %d: bad message type %d, expected TRANSFER(%d)\n",
@@ -64,7 +69,7 @@ void await_orders(Unit* self, FILE* log_file) {
             exit(EXIT_FAILURE);
         }
     }
-    Unit_set_balance(self, self->balance);
+    Unit_set_balance(self, self->balance, get_lamport_time());
 
     // Clean up
     Message_free(in_msg);
@@ -74,7 +79,7 @@ void await_orders(Unit* self, FILE* log_file) {
 void send_started(Unit* self, FILE* log_file) {
     char log_text[MAX_PAYLOAD_LEN];
 
-    timestamp_t time = get_physical_time();
+    timestamp_t time = inc_lamport_time();
     create_log_text(log_text, log_started_fmt, time, self->lid, getpid(), getppid(), self->balance);
 
     Message* started_msg = Message_new(STARTED, log_text, strlen(log_text));
@@ -91,7 +96,7 @@ void send_started(Unit* self, FILE* log_file) {
 void send_done(Unit* self, FILE* log_file) {
     char log_text[MAX_PAYLOAD_LEN];
 
-    timestamp_t time = get_physical_time();
+    timestamp_t time = inc_lamport_time();
     create_log_text(log_text, log_done_fmt, time, self->lid, self->balance);
 
     Message* done_msg = Message_new(DONE, log_text, strlen(log_text));
@@ -108,6 +113,7 @@ void send_done(Unit* self, FILE* log_file) {
 void send_history(Unit* self) {
     size_t payload_len =
             sizeof(BalanceHistory) - ((MAX_T + 1 - self->balance_history->s_history_len)*sizeof(BalanceState));
+    inc_lamport_time();
     Message* hist_msg = Message_new(BALANCE_HISTORY, self->balance_history, payload_len);
 
     if (send(self, PARENT_ID, hist_msg) < 0) {
@@ -178,14 +184,14 @@ void child_main(Unit* self, FILE* log_file) {
 
     send_started(self, log_file);
     receive_all(self, STARTED);
-    create_log_text(log_text, log_received_all_started_fmt, get_physical_time(), self->lid);
+    create_log_text(log_text, log_received_all_started_fmt, get_lamport_time(), self->lid);
     log_msg(log_file, log_text);
 
     await_orders(self, log_file);
 
     send_done(self, log_file);
     receive_all(self, DONE);
-    create_log_text(log_text, log_received_all_done_fmt, get_physical_time(), self->lid);
+    create_log_text(log_text, log_received_all_done_fmt, get_lamport_time(), self->lid);
     log_msg(log_file, log_text);
 
     send_history(self);
@@ -204,11 +210,13 @@ void parent_main(Unit* self, FILE* log_file) {
 
     // Run main job
     receive_all(self, STARTED);
-    create_log_text(log_text, log_received_all_started_fmt, get_physical_time(), self->lid);
+    create_log_text(log_text, log_received_all_started_fmt, get_lamport_time(), self->lid);
     log_msg(log_file, log_text);
 
+    sleep(1);
     bank_robbery(self, self->n_nodes - 1);
 //    printf("%d sending STOP: %d\n", self->lid, STOP);
+    stop_msg->s_header.s_local_time = inc_lamport_time();
     send_multicast(self, stop_msg);
     receive_all(self, DONE);
 

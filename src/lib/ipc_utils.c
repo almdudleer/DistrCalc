@@ -20,10 +20,12 @@ int receive_or_die(Unit* self, local_id from, Message* msg) {
                 return -1;
             } else {
                 nanosleep(&tw, &tr);
-                timeout_ns -= WAIT_TIME_NS;
-                if (timeout_ns <= 0) {
-                    errno = EBUSY;
-                    return -1;
+                if (TIMEOUTS) {
+                    timeout_ns -= WAIT_TIME_NS;
+                    if (timeout_ns <= 0) {
+                        errno = EBUSY;
+                        return -1;
+                    }
                 }
             }
         } else return 0;
@@ -41,10 +43,12 @@ int receive_any_or_die(Unit* self, Message* msg) {
         if (receive_any(self, msg) < 0) {
             if (errno == EAGAIN) {
                 nanosleep(&tw, &tr);
-                timeout_ns -= WAIT_TIME_NS;
-                if (timeout_ns <= 0) {
-                    errno = EBUSY;
-                    return -1;
+                if (TIMEOUTS) {
+                    timeout_ns -= WAIT_TIME_NS;
+                    if (timeout_ns <= 0) {
+                        errno = EBUSY;
+                        return -1;
+                    }
                 }
             } else {
                 return -1;

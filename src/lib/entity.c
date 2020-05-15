@@ -16,7 +16,7 @@ Message* Message_new(MessageType type, void* payload, size_t payload_len) {
     // Create header
     MessageHeader header;
     header.s_magic = MESSAGE_MAGIC;
-    header.s_local_time = get_physical_time();
+    header.s_local_time = get_lamport_time();
     header.s_payload_len = payload_len;
     header.s_type = type;
     self->s_header = header;
@@ -56,12 +56,13 @@ void Unit_free (Unit *self) {
     free(self);
 }
 
-void Unit_set_balance(Unit *self, balance_t new_balance) {
+void Unit_set_balance(Unit* self, balance_t new_balance, timestamp_t change_time) {
     int hist_len = self->balance_history->s_history_len;
-    timestamp_t time = get_physical_time();
+    balance_t change = new_balance - self->balance;
+    timestamp_t now = get_lamport_time();
 //    printf("%d: %d hist_len before: %d, last_balance: %d at %d\n", time, self->lid, hist_len,
 //            self->balance_history->s_history[hist_len-1].s_balance, self->balance_history->s_history[hist_len-1].s_time);
-    for (; hist_len - 1 < time; hist_len++) {
+    for (; hist_len - 1 < now; hist_len++) {
         BalanceState bs;
         BalanceState_new(&bs, self->balance, hist_len - 1);
         self->balance_history->s_history[hist_len - 1] = bs;
@@ -69,10 +70,13 @@ void Unit_set_balance(Unit *self, balance_t new_balance) {
 //               self->balance_history->s_history[hist_len-1].s_balance, self->balance_history->s_history[hist_len-1].s_time);
     }
     BalanceState bs;
-    BalanceState_new(&bs, new_balance, time);
-    self->balance_history->s_history[time] = bs;
+    BalanceState_new(&bs, new_balance, now);
+    self->balance_history->s_history[now] = bs;
     self->balance = new_balance;
     self->balance_history->s_history_len = hist_len;
+    for (timestamp_t time = change_time; time < now; time++) {
+        self->balance_history->s_history[time].s_balance_pending_in = change;
+    }
 //    printf("%d: %d hist_len after: %d, last_balance: %d at %d\n", time, self->lid, hist_len,
 //           self->balance_history->s_history[hist_len-1].s_balance, self->balance_history->s_history[hist_len-1].s_time);
 }
@@ -83,7 +87,7 @@ void BalanceHistory_new(BalanceHistory *self, local_id lid, balance_t init_balan
     self->s_id = lid;
     self->s_history_len = 1;
     BalanceState balance_state;
-    BalanceState_new(&balance_state, init_balance, get_physical_time());
+    BalanceState_new(&balance_state, init_balance, get_lamport_time());
     // TODO: check for errors (memcpy?)
     self->s_history[0] = balance_state;
 }

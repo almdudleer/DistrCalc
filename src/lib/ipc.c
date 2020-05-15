@@ -8,6 +8,7 @@
 #include "ipc.h"
 #include "entity.h"
 #include <time.h>
+#include "lamp_time.h"
 #include "ipc_utils.h"
 
 int send(void* self, local_id dst, const Message* msg) {
@@ -50,10 +51,12 @@ int receive(void* self, local_id from, Message* msg) {
                     return -1;
                 } else {
                     nanosleep(&tw, &tr);
-                    timeout_ns -= WAIT_TIME_NS;
-                    if (timeout_ns <= 0) {
-                        errno = EBUSY;
-                        return -1;
+                    if (TIMEOUTS) {
+                        timeout_ns -= WAIT_TIME_NS;
+                        if (timeout_ns <= 0) {
+                            errno = EBUSY;
+                            return -1;
+                        }
                     }
                 }
             } else break;
@@ -63,7 +66,7 @@ int receive(void* self, local_id from, Message* msg) {
 //    if (me->lid == PARENT_ID && msg->s_header.s_type == 0) {
 //        printf("%d received STARTED from %d\n", me->lid, from);
 //    }
-
+    set_lamport_time(msg->s_header.s_local_time);
     return 0;
 }
 

@@ -32,13 +32,7 @@ void create_log_text(char* msg_text, const char* format, ...) {
 }
 
 void log_msg(FILE* log_file, char* msg) {
-
-//    log_file = fopen(events_log, "a");
-
     write_nonblock(STDOUT_FILENO, msg, strlen(msg));
-
-//    write_nonblock(log_file->_fileno, msg, strlen(msg));
-
     fflush(log_file);
     if (fprintf(log_file, "%s", msg) < 0) {
         perror("fprintf");
