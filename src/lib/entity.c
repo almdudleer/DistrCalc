@@ -4,6 +4,7 @@
 
 #include "ipc.h"
 #include "entity.h"
+#include "banking.h"
 #include <string.h>
 #include <stdio.h>
 #include <malloc.h>
@@ -17,7 +18,7 @@ Message* Message_new(MessageType type, void* payload, size_t payload_len) {
     MessageHeader header;
     header.s_magic = MESSAGE_MAGIC;
     header.s_local_time = get_lamport_time();
-    header.s_payload_len = payload_len;
+    header.s_payload_len = (uint16_t) payload_len;
     header.s_type = type;
     self->s_header = header;
 
@@ -39,69 +40,16 @@ void Message_free(Message* self) {
 
 // ----------------------------------------------------- UNIT ------------------------------------------------------- //
 
-Unit* Unit_new(int lid, int n_nodes, int*** pipes, balance_t balance) {
+Unit* Unit_new(int lid, int n_nodes, int*** pipes) {
     Unit* self = malloc(sizeof(Unit));
     self->pipes = pipes;
     self->n_nodes = n_nodes;
     self->lid = lid;
-    malloc(self->n_nodes*sizeof(char));
-    self->balance = balance;
-    self->balance_history = malloc(sizeof(BalanceHistory));
-    BalanceHistory_new(self->balance_history, self->lid, self->balance);
     return self;
 }
 
 void Unit_free (Unit *self) {
-    BalanceHistory_free(self->balance_history);
     free(self);
-}
-
-void Unit_set_balance(Unit* self, balance_t new_balance, timestamp_t change_time) {
-    int hist_len = self->balance_history->s_history_len;
-    balance_t change = new_balance - self->balance;
-    timestamp_t now = get_lamport_time();
-//    printf("%d: %d hist_len before: %d, last_balance: %d at %d\n", time, self->lid, hist_len,
-//            self->balance_history->s_history[hist_len-1].s_balance, self->balance_history->s_history[hist_len-1].s_time);
-    for (; hist_len - 1 < now; hist_len++) {
-        BalanceState bs;
-        BalanceState_new(&bs, self->balance, hist_len - 1);
-        self->balance_history->s_history[hist_len - 1] = bs;
-//        printf("%d: %d hist_len in: %d, last_balance: %d at %d\n", time, self->lid, hist_len,
-//               self->balance_history->s_history[hist_len-1].s_balance, self->balance_history->s_history[hist_len-1].s_time);
-    }
-    BalanceState bs;
-    BalanceState_new(&bs, new_balance, now);
-    self->balance_history->s_history[now] = bs;
-    self->balance = new_balance;
-    self->balance_history->s_history_len = hist_len;
-    for (timestamp_t time = change_time; time < now; time++) {
-        self->balance_history->s_history[time].s_balance_pending_in = change;
-    }
-//    printf("%d: %d hist_len after: %d, last_balance: %d at %d\n", time, self->lid, hist_len,
-//           self->balance_history->s_history[hist_len-1].s_balance, self->balance_history->s_history[hist_len-1].s_time);
-}
-
-// ---------------------------------------------- BALANCE HISTORY --------------------------------------------------- //
-
-void BalanceHistory_new(BalanceHistory *self, local_id lid, balance_t init_balance) {
-    self->s_id = lid;
-    self->s_history_len = 1;
-    BalanceState balance_state;
-    BalanceState_new(&balance_state, init_balance, get_lamport_time());
-    // TODO: check for errors (memcpy?)
-    self->s_history[0] = balance_state;
-}
-
-void BalanceHistory_free(BalanceHistory* history) {
-    free(history);
-}
-
-// ----------------------------------------------- BALANCE STATE ---------------------------------------------------- //
-
-void BalanceState_new(BalanceState *self, balance_t balance, timestamp_t time) {
-    self->s_balance = balance;
-    self->s_time = time;
-    self->s_balance_pending_in = 0;
 }
 
 int ***alloc_pipes(size_t xlen, size_t ylen, size_t zlen) {

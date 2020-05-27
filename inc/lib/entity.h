@@ -7,17 +7,13 @@
 
 #include <stdio.h>
 #include "ipc.h"
-#include "banking.h"
 
 typedef struct Unit Unit;
 
 struct Unit {
     int*** pipes;
     int n_nodes;
-    local_id lid;
-    balance_t balance;
-
-    BalanceHistory* balance_history;
+    int lid;
 };
 
 Message* Message_new(MessageType type, void* payload, size_t payload_len);
@@ -26,17 +22,9 @@ Message* Message_empty();
 
 void Message_free(Message* self);
 
-Unit* Unit_new(int lid, int n_nodes, int*** pipes, balance_t balance);
+Unit* Unit_new(int lid, int n_nodes, int*** pipes);
 
 void Unit_free(Unit* self);
-
-void Unit_set_balance(Unit* self, balance_t new_balance, timestamp_t change_time);
-
-void BalanceHistory_new(BalanceHistory *self, local_id lid, balance_t init_balance);
-
-void BalanceHistory_free(BalanceHistory* history);
-
-void BalanceState_new(BalanceState *self, balance_t balance, timestamp_t time);
 
 // 3d array operations
 void print_pipes(int*** pipes, int n_nodes);

@@ -12,75 +12,13 @@
 #include <fcntl.h>
 #include <getopt.h>
 
-int started_left = -1, done_left = -1, history_left = -1;
-
-AllHistory allHistory;
-
-void await_orders(Unit* self, FILE* log_file) {
-
-    Message* in_msg = Message_empty();
-    Message* out_msg = Message_new(ACK, "", 0);
-
-    while (in_msg->s_header.s_type != STOP) {
-        if (receive_any_or_die(self, in_msg) >= 0) {
-            if (in_msg->s_header.s_type == TRANSFER) {
-                TransferOrder* transfer_order = (TransferOrder*) in_msg->s_payload;
-
-                local_id dst;
-                Message* msg;
-                balance_t balance_change;
-                timestamp_t time = inc_lamport_time();
-                timestamp_t change_time;
-                char log_text[MAX_PAYLOAD_LEN];
-
-                if (transfer_order->s_src == self->lid) {
-                    dst = transfer_order->s_dst;
-                    msg = in_msg;
-                    balance_change = -transfer_order->s_amount;
-                    change_time = time;
-                    create_log_text(log_text, log_transfer_out_fmt, time, transfer_order->s_src,
-                                    transfer_order->s_amount, transfer_order->s_dst);
-                } else if (transfer_order->s_dst == self->lid) {
-                    dst = PARENT_ID;
-                    msg = out_msg;
-                    balance_change = transfer_order->s_amount;
-                    change_time = in_msg->s_header.s_local_time;
-                    create_log_text(log_text, log_transfer_in_fmt, time, transfer_order->s_dst,
-                                    transfer_order->s_amount, transfer_order->s_src);
-                } else {
-                    fprintf(stderr, "Unit %d received unexpected message\n", self->lid);
-                    exit(EXIT_FAILURE);
-                }
-
-//                printf("%d sending %d to %d\n", self->lid, msg->s_header.s_type, dst);
-                msg->s_header.s_local_time = time;
-                if (send(self, dst, msg) < 0) {
-                    perror("send");
-                    exit(EXIT_FAILURE);
-                }
-                Unit_set_balance(self, self->balance + balance_change, change_time);
-                log_msg(log_file, log_text);
-            } else if (in_msg->s_header.s_type != STOP) {
-                fprintf(stderr, "Process %d: bad message type %d, expected TRANSFER(%d)\n",
-                        self->lid, in_msg->s_header.s_type, TRANSFER);
-            }
-        } else {
-            perror("await_orders: receive_any_or_die");
-            exit(EXIT_FAILURE);
-        }
-    }
-    Unit_set_balance(self, self->balance, get_lamport_time());
-
-    // Clean up
-    Message_free(in_msg);
-    Message_free(out_msg);
-}
+int started_left = -1, done_left = -1;
 
 void send_started(Unit* self, FILE* log_file) {
     char log_text[MAX_PAYLOAD_LEN];
 
     timestamp_t time = inc_lamport_time();
-    create_log_text(log_text, log_started_fmt, time, self->lid, getpid(), getppid(), self->balance);
+    create_log_text(log_text, log_started_fmt, time, self->lid, getpid(), getppid());
 
     Message* started_msg = Message_new(STARTED, log_text, strlen(log_text));
 //    printf("%d sending STARTED: %d\n", self->lid, STARTED);
@@ -97,7 +35,7 @@ void send_done(Unit* self, FILE* log_file) {
     char log_text[MAX_PAYLOAD_LEN];
 
     timestamp_t time = inc_lamport_time();
-    create_log_text(log_text, log_done_fmt, time, self->lid, self->balance);
+    create_log_text(log_text, log_done_fmt, time, self->lid);
 
     Message* done_msg = Message_new(DONE, log_text, strlen(log_text));
 //    printf("%d sending DONE: %d\n", self->lid, DONE);
@@ -110,31 +48,10 @@ void send_done(Unit* self, FILE* log_file) {
     Message_free(done_msg);
 }
 
-void send_history(Unit* self) {
-    size_t payload_len =
-            sizeof(BalanceHistory) - ((MAX_T + 1 - self->balance_history->s_history_len)*sizeof(BalanceState));
-    inc_lamport_time();
-    Message* hist_msg = Message_new(BALANCE_HISTORY, self->balance_history, payload_len);
-
-    if (send(self, PARENT_ID, hist_msg) < 0) {
-        perror("send");
-        exit(EXIT_FAILURE);
-    }
-
-//    printf("%d sending BALANCE_HISTORY\n", self->lid);
-    Message_free(hist_msg);
-}
-
 void receive_all(Unit* self, MessageType type) {
     Message* in_msg;
-    Message msg;
-    if (type == BALANCE_HISTORY) {
-        in_msg = &msg;
-    }
     while (1) {
-        if (type != BALANCE_HISTORY) {
-            in_msg = Message_empty();
-        }
+        in_msg = Message_empty();
         if (receive_any_or_die(self, in_msg) == 0) {
             switch (in_msg->s_header.s_type) {
                 case STARTED:
@@ -149,19 +66,6 @@ void receive_all(Unit* self, MessageType type) {
                     if (type == DONE && done_left == 0) {
                         done_left = -1;
                         return;
-                    }
-                    break;
-                case BALANCE_HISTORY:
-                    if (history_left > 0) {
-                        history_left--;
-                        allHistory.s_history[history_left] = *((BalanceHistory*) in_msg->s_payload);
-                        allHistory.s_history_len++;
-                    }
-                    if (type == BALANCE_HISTORY) {
-                        if (history_left == 0) {
-                            history_left = -1;
-                            return;
-                        }
                     }
                     break;
                 default:
@@ -180,55 +84,32 @@ void child_main(Unit* self, FILE* log_file) {
     char log_text[MAX_PAYLOAD_LEN];
 
     started_left = done_left = self->n_nodes - 2;
-    history_left = -1;
 
     send_started(self, log_file);
     receive_all(self, STARTED);
     create_log_text(log_text, log_received_all_started_fmt, get_lamport_time(), self->lid);
     log_msg(log_file, log_text);
 
-    await_orders(self, log_file);
-
     send_done(self, log_file);
     receive_all(self, DONE);
     create_log_text(log_text, log_received_all_done_fmt, get_lamport_time(), self->lid);
     log_msg(log_file, log_text);
-
-    send_history(self);
 
     exit(EXIT_SUCCESS);
 }
 
 void parent_main(Unit* self, FILE* log_file) {
     char log_text[MAX_PAYLOAD_LEN];
-
-    started_left = done_left = history_left = self->n_nodes - 1;
-
-    // Create messages
-    Message* stop_msg = Message_new(STOP, NULL, 0);
-    Message* ack_msg = Message_new(ACK, NULL, 0);
+    started_left = done_left = self->n_nodes - 1;
 
     // Run main job
     receive_all(self, STARTED);
     create_log_text(log_text, log_received_all_started_fmt, get_lamport_time(), self->lid);
     log_msg(log_file, log_text);
 
-    sleep(1);
-    bank_robbery(self, self->n_nodes - 1);
-//    printf("%d sending STOP: %d\n", self->lid, STOP);
-    stop_msg->s_header.s_local_time = inc_lamport_time();
-    send_multicast(self, stop_msg);
     receive_all(self, DONE);
-
-    Message** history_messages = malloc(sizeof(Message*)*history_left);
-    receive_all(self, BALANCE_HISTORY);
-    print_history(&allHistory);
-
-    // Clean up
-    Message_free(stop_msg);
-    Message_free(ack_msg);
-    //        Message_free(messages[i]);
-    free(history_messages);
+    create_log_text(log_text, log_received_all_done_fmt, get_lamport_time(), self->lid);
+    log_msg(log_file, log_text);
 }
 
 int main(int argc, char** argv) {
@@ -239,26 +120,32 @@ int main(int argc, char** argv) {
 
     // Define variables to be set from opts
     local_id n_processes;
-    balance_t** balances_pointer;
+    static int mutex_flag = 0;
+
+    // Store opts
+    char* endptr;
+    int opt;
+    int option_index = 0;
+    static struct option long_options[] =
+            {
+                    {"mutexl", no_argument,       &mutex_flag, 1},
+                    {"nproc",  required_argument, 0,           'p'},
+            };
 
     // Read opts
-    int opt;
-    char* endptr;
-    while ((opt = getopt(argc, argv, "p:")) != -1) {
-        if (opt == 'p') {
-            n_processes = (int) strtol(optarg, &endptr, 10) + 1;
-            if (n_processes < 2) {
-                fprintf(stderr, "not enough processes: %d", n_processes);
-                exit(EXIT_FAILURE);
-            }
-            balance_t* balances = malloc((n_processes)*sizeof(balance_t));
-            balances_pointer = &balances;
-            for (int i = 1; i < n_processes; i++) {
-                balances[i] = strtol(argv[optind], &endptr, 10);
-                optind++;
-            }
-        } else {
-            abort();
+    while ((opt = getopt_long(argc, argv, "p:", long_options, &option_index)) != -1) {
+        switch (opt) {
+            case 'p':
+                n_processes = (local_id) ((int) strtol(optarg, &endptr, 10) + 1);
+                if (n_processes < 2) {
+                    fprintf(stderr, "not enough processes: %d", n_processes);
+                    exit(EXIT_FAILURE);
+                }
+                break;
+            case 0:
+                break;
+            default:
+                abort();
         }
     }
 
@@ -289,7 +176,7 @@ int main(int argc, char** argv) {
 
     // Fork child processes
     for (local_id lid = 1; lid < (local_id) n_processes; lid++) {
-        Unit* self = Unit_new(lid, n_processes, pipes, (*balances_pointer)[lid]);
+        Unit* self = Unit_new(lid, n_processes, pipes);
         switch (fork()) {
             case -1: {
                 perror("fork");
@@ -304,7 +191,7 @@ int main(int argc, char** argv) {
     }
 
     // Run parent process
-    Unit* parent_unit = Unit_new(PARENT_ID, n_processes, pipes, 5);
+    Unit* parent_unit = Unit_new(PARENT_ID, n_processes, pipes);
     close_bad_pipes(parent_unit, n_processes, pipes);
     parent_main(parent_unit, events_log_file);
     Unit_free(parent_unit);
