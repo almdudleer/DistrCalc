@@ -16,6 +16,6 @@ add_library(entity lib/entity.c ../inc/lib/entity.h)
 add_library(banking ../inc/lib/banking.h ../inc/lib/lamp_time.h lib/lamp_time.c)
 
 # executables
-add_executable(pa2 ../inc/pa2345.h pa23.c)
+add_executable(pa4 ../inc/pa2345.h pa4.c)
 
-target_link_libraries(pa2 utils ipc entity banking "/home/almdudleer/Studies/DistCalc/pas/libruntime.so")
+target_link_libraries(pa4 utils ipc entity banking "/home/almdudleer/Studies/DistCalc/pas/libruntime.so")
