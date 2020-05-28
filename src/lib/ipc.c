@@ -66,7 +66,7 @@ int receive(void* self, local_id from, Message* msg) {
 //    if (me->lid == PARENT_ID && msg->s_header.s_type == 0) {
 //        printf("%d received STARTED from %d\n", me->lid, from);
 //    }
-    set_lamport_time(msg->s_header.s_local_time);
+    compare_and_inc_time(msg->s_header.s_local_time);
     return 0;
 }
 

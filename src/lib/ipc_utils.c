@@ -57,3 +57,15 @@ int receive_any_or_die(Unit* self, Message* msg) {
     }
 }
 
+int request_cs(const void* self) {
+    Unit* this = (Unit*) self;
+    printf("unit %d request_cs\n", this->lid);
+    return 0;
+}
+
+int release_cs(const void* self) {
+    Unit* this = (Unit*) self;
+    printf("unit %d release_cs\n", this->lid);
+    return 0;
+}
+

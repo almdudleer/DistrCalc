@@ -5,7 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-
+#include <pa2345.h>
 
 void close_bad_pipes(Unit* self, int n_processes, int** const* pipes) {
     for (local_id from = 0; from < (local_id) n_processes; from++) {
@@ -33,12 +33,10 @@ void create_log_text(char* msg_text, const char* format, ...) {
 
 void log_msg(FILE* log_file, char* msg) {
     write_nonblock(STDOUT_FILENO, msg, strlen(msg));
-    fflush(log_file);
     if (fprintf(log_file, "%s", msg) < 0) {
         perror("fprintf");
     }
     fflush(log_file);
-
 }
 
 int write_nonblock(int fd, char* msg, unsigned long n_bytes) {

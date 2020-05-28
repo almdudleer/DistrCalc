@@ -14,7 +14,7 @@ timestamp_t inc_lamport_time() {
     return ++lamport_time;
 }
 
-short set_lamport_time(timestamp_t val) {
+short compare_and_inc_time(timestamp_t val) {
     if (val > lamport_time) {
         lamport_time = val;
     }

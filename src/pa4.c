@@ -11,8 +11,10 @@
 #include "pa2345.h"
 #include <fcntl.h>
 #include <getopt.h>
+#include <queue.h>
 
 int started_left = -1, done_left = -1;
+static int mutex_flag = 0;
 
 void send_started(Unit* self, FILE* log_file) {
     char log_text[MAX_PAYLOAD_LEN];
@@ -80,6 +82,20 @@ void receive_all(Unit* self, MessageType type) {
     }
 }
 
+void job(Unit* self, char* log_text) {
+    int n_iter = self->lid * 5;
+    for (int i = 1; i <= n_iter; i++) {
+        create_log_text(log_text, log_loop_operation_fmt, self->lid, i, n_iter);
+        if (mutex_flag) {
+            request_cs(self);
+        }
+        print(log_text);
+        if (mutex_flag) {
+            release_cs(self);
+        }
+    }
+}
+
 void child_main(Unit* self, FILE* log_file) {
     char log_text[MAX_PAYLOAD_LEN];
 
@@ -89,6 +105,8 @@ void child_main(Unit* self, FILE* log_file) {
     receive_all(self, STARTED);
     create_log_text(log_text, log_received_all_started_fmt, get_lamport_time(), self->lid);
     log_msg(log_file, log_text);
+
+    job(self, log_text);
 
     send_done(self, log_file);
     receive_all(self, DONE);
@@ -120,7 +138,6 @@ int main(int argc, char** argv) {
 
     // Define variables to be set from opts
     local_id n_processes;
-    static int mutex_flag = 0;
 
     // Store opts
     char* endptr;
