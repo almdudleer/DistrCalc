@@ -12,8 +12,9 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <queue.h>
+#include <errno.h>
+#include <time.h>
 
-int started_left = -1, done_left = -1;
 static int mutex_flag = 0;
 
 void send_started(Unit* self, FILE* log_file) {
@@ -50,88 +51,87 @@ void send_done(Unit* self, FILE* log_file) {
     Message_free(done_msg);
 }
 
-void receive_all(Unit* self, MessageType type) {
+//void job(Unit* self, char* log_text) {
+//    for (int i = 1; i <= n_iter; i++) {
+//        create_log_text(log_text, log_loop_operation_fmt, self->lid, i, n_iter);
+//        if (mutex_flag) {
+//            request_cs(self);
+//        }
+//        print(log_text);
+//        if (mutex_flag) {
+//            release_cs(self);
+//        }
+//    }
+//}
+
+void proc_main(Unit* self, FILE* log_file) {
+    char log_text[MAX_PAYLOAD_LEN];
+    int started_left, done_left;
+    int is_parent = self->lid == PARENT_ID;
+    int n_iter = self->lid * 5;
+
+    if (is_parent) {
+        started_left = done_left = self->n_nodes - 1;
+    } else {
+        started_left = done_left = self->n_nodes - 2;
+    }
+
+
     Message* in_msg;
+
+    // Timeouts
+    struct timespec tw = {0, WAIT_TIME_NS};
+    struct timespec tr;
+    unsigned long long timeout_ns = TIMEOUT_NS;
+
+    send_started(self, log_file);
     while (1) {
         in_msg = Message_empty();
-        if (receive_any_or_die(self, in_msg) == 0) {
+        if (receive_any(self, in_msg) == 0) {
             switch (in_msg->s_header.s_type) {
                 case STARTED:
                     started_left--;
-                    if (type == STARTED && started_left == 0) {
-                        started_left = -1;
-                        return;
+                    if (started_left == 0) {
+                        create_log_text(log_text, log_received_all_started_fmt, get_lamport_time(), self->lid);
+                        log_msg(log_file, log_text);
+                        send_done(self, log_file);
                     }
                     break;
                 case DONE:
                     done_left--;
-                    if (type == DONE && done_left == 0) {
-                        done_left = -1;
+                    if (done_left == 0) {
+                        create_log_text(log_text, log_received_all_done_fmt, get_lamport_time(), self->lid);
+                        log_msg(log_file, log_text);
+                        Unit_free(self);
                         return;
                     }
                     break;
                 default:
-                    fprintf(stderr, "Process %d: bad message type %d, expected %d\n",
-                            self->lid, in_msg->s_header.s_type, type);
+                    fprintf(stderr, "Process %d: bad message type %d\n",
+                            self->lid, in_msg->s_header.s_type);
                     exit(EXIT_FAILURE);
             }
         } else {
-            perror("receive_all: receive_any_or_die");
-            exit(EXIT_FAILURE);
+            if (errno == EAGAIN) {
+                nanosleep(&tw, &tr);
+                if (TIMEOUTS) {
+                    timeout_ns -= WAIT_TIME_NS;
+                    if (timeout_ns <= 0) {
+                        errno = EBUSY;
+                        perror("receive_any");
+                        exit(EXIT_FAILURE);
+                    }
+                }
+            } else {
+                perror("receive_any");
+                exit(EXIT_FAILURE);
+            }
         }
+        Message_free(in_msg);
     }
-}
-
-void job(Unit* self, char* log_text) {
-    int n_iter = self->lid * 5;
-    for (int i = 1; i <= n_iter; i++) {
-        create_log_text(log_text, log_loop_operation_fmt, self->lid, i, n_iter);
-        if (mutex_flag) {
-            request_cs(self);
-        }
-        print(log_text);
-        if (mutex_flag) {
-            release_cs(self);
-        }
-    }
-}
-
-void child_main(Unit* self, FILE* log_file) {
-    char log_text[MAX_PAYLOAD_LEN];
-
-    started_left = done_left = self->n_nodes - 2;
-
-    send_started(self, log_file);
-    receive_all(self, STARTED);
-    create_log_text(log_text, log_received_all_started_fmt, get_lamport_time(), self->lid);
-    log_msg(log_file, log_text);
-
-    job(self, log_text);
-
-    send_done(self, log_file);
-    receive_all(self, DONE);
-    create_log_text(log_text, log_received_all_done_fmt, get_lamport_time(), self->lid);
-    log_msg(log_file, log_text);
-
-    exit(EXIT_SUCCESS);
-}
-
-void parent_main(Unit* self, FILE* log_file) {
-    char log_text[MAX_PAYLOAD_LEN];
-    started_left = done_left = self->n_nodes - 1;
-
-    // Run main job
-    receive_all(self, STARTED);
-    create_log_text(log_text, log_received_all_started_fmt, get_lamport_time(), self->lid);
-    log_msg(log_file, log_text);
-
-    receive_all(self, DONE);
-    create_log_text(log_text, log_received_all_done_fmt, get_lamport_time(), self->lid);
-    log_msg(log_file, log_text);
 }
 
 int main(int argc, char** argv) {
-
     // Open log files
     FILE* events_log_file = fopen(events_log, "w");
     FILE* pipes_log_file = fopen(pipes_log, "w");
@@ -197,12 +197,12 @@ int main(int argc, char** argv) {
         switch (fork()) {
             case -1: {
                 perror("fork");
-                exit(1);
+                exit(EXIT_FAILURE);
             }
             case 0: {
                 close_bad_pipes(self, n_processes, pipes);
-                child_main(self, events_log_file);
-                Unit_free(self);
+                proc_main(self, events_log_file);
+                exit(EXIT_SUCCESS);
             }
         }
     }
@@ -210,8 +210,7 @@ int main(int argc, char** argv) {
     // Run parent process
     Unit* parent_unit = Unit_new(PARENT_ID, n_processes, pipes);
     close_bad_pipes(parent_unit, n_processes, pipes);
-    parent_main(parent_unit, events_log_file);
-    Unit_free(parent_unit);
+    proc_main(parent_unit, events_log_file);
 
     // Wait for children
     for (int i = 0; i < n_processes; i++)
@@ -219,6 +218,5 @@ int main(int argc, char** argv) {
 
     // Clean up
     fclose(events_log_file);
-
     return 0;
 }
