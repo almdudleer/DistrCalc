@@ -43,12 +43,14 @@ void Message_free(Message* self) {
 Unit* Unit_new(int lid, int n_nodes, int*** pipes) {
     Unit* self = malloc(sizeof(Unit));
     self->pipes = pipes;
+    self->que = queue_new();
     self->n_nodes = n_nodes;
     self->lid = lid;
     return self;
 }
 
 void Unit_free (Unit *self) {
+    queue_free(self->que);
     free(self);
 }
 

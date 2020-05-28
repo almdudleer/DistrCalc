@@ -7,13 +7,15 @@
 
 #include <stdio.h>
 #include "ipc.h"
+#include "queue.h"
 
 typedef struct Unit Unit;
 
 struct Unit {
     int*** pipes;
+    queue* que;
     int n_nodes;
-    int lid;
+    local_id lid;
 };
 
 Message* Message_new(MessageType type, void* payload, size_t payload_len);

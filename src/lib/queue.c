@@ -5,44 +5,54 @@
 #include <stddef.h>
 #include <malloc.h>
 
-queue* queue_new(size_t size) {
-
+queue* queue_new() {
     queue* que = malloc(sizeof(queue));
     if (!que) {
         perror("queue_new: malloc");
         return NULL;
     }
-
-    que->start = calloc(size, sizeof(void*));
-    if (!que->start) {
-        perror("queue_new: calloc");
-        return NULL;
-    }
-
-    que->size = size;
-    que->end = que->start;
+    que->head = malloc(sizeof(node));
+    que->head->next = NULL;
+    que->head->value = NULL;
     return que;
 }
 
 void queue_free(queue* que) {
-    free(que->start);
     free(que);
 }
 
-void* dequeue(queue* que) {
-    if (que->start == que->end) {
+cs_request* dequeue(queue* que) {
+    if (que->head->next == NULL) {
+        fprintf(stderr, "queue empty\n");
         return NULL;
     }
-    void* res = *(que->end);
-    que->end--;
+    node* last_first = que->head->next;
+    cs_request* res = last_first->value;
+    que->head->next = last_first->next;
+    free(last_first);
     return res;
 }
 
-int enqueue(queue* que, void* element) {
-    if (que->end - que->start == que->size) {
+int enqueue(queue* que, cs_request* element) {
+    node* cur = que->head->next;
+    node* prev = que->head;
+    while (cur != NULL) {
+        if ((cur->value->time > element->time) ||
+            (cur->value->time == element->time && cur->value->lid > element->lid)) break;
+        prev = cur;
+        cur = cur->next;
+    }
+    node* new_node = malloc(sizeof(node));
+    if (!new_node) {
+        perror("enqueue: malloc");
         return -1;
     }
-    que->end++;
-    *que->end = element;
+    new_node->value = element;
+    new_node->next = cur;
+    prev->next = new_node;
     return 0;
+}
+
+cs_request* peek(queue* que) {
+    return que->head->value;
 }
