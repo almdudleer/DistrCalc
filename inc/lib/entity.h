@@ -16,6 +16,8 @@ struct Unit {
     queue* que;
     int n_nodes;
     local_id lid;
+    local_id last_message_lid;
+    int done;
 };
 
 Message* Message_new(MessageType type, void* payload, size_t payload_len);

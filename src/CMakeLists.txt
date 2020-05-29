@@ -8,7 +8,7 @@ include_directories(../inc)
 include_directories(../inc/lib)
 
 add_library(utils lib/utils.c ../inc/lib/utils.h)
-add_library(ipc lib/ipc.c ../inc/lib/ipc.h ../inc/lib/ipc_utils.h lib/ipc_utils.c)
+add_library(ipc lib/ipc.c ../inc/lib/ipc.h)
 add_library(entity lib/entity.c ../inc/lib/entity.h)
 add_library(lamport lib/lamp_time.c ../inc/lib/lamp_time.h)
 add_library(queue lib/queue.c ../inc/lib/queue.h)

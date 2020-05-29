@@ -38,7 +38,7 @@ int enqueue(queue* que, cs_request* element) {
     node* prev = que->head;
     while (cur != NULL) {
         if ((cur->value->time > element->time) ||
-            (cur->value->time == element->time && cur->value->lid > element->lid)) break;
+            ((cur->value->time == element->time) && (cur->value->lid > element->lid))) break;
         prev = cur;
         cur = cur->next;
     }
@@ -54,5 +54,17 @@ int enqueue(queue* que, cs_request* element) {
 }
 
 cs_request* peek(queue* que) {
-    return que->head->value;
+    if (que->head->next != NULL)
+        return que->head->next->value;
+    else
+        return NULL;
+}
+
+void queue_print(queue* que) {
+    node* cur = que->head->next;
+    while (cur != NULL) {
+        printf("(%d,%d); ", cur->value->lid, cur->value->time);
+        cur = cur->next;
+    }
+    printf("\n");
 }

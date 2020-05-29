@@ -6,7 +6,6 @@
 #include "banking.h"
 #include "utils.h"
 #include "common.h"
-#include "ipc_utils.h"
 #include "lamp_time.h"
 #include "pa2345.h"
 #include <fcntl.h>
@@ -34,50 +33,121 @@ void send_started(Unit* self, FILE* log_file) {
     Message_free(started_msg);
 }
 
-void send_done(Unit* self, FILE* log_file) {
+void send_done(Unit* self, FILE* log_file, const int* done_left) {
     char log_text[MAX_PAYLOAD_LEN];
 
     timestamp_t time = inc_lamport_time();
     create_log_text(log_text, log_done_fmt, time, self->lid);
 
     Message* done_msg = Message_new(DONE, log_text, strlen(log_text));
-//    printf("%d sending DONE: %d\n", self->lid, DONE);
+//    printf("process %d - sending DONE: %d\n", self->lid, DONE);
     if (send_multicast(self, done_msg) < 0) {
         perror("send_multicast");
         exit(EXIT_FAILURE);
     }
 
+    self->done = 1;
     log_msg(log_file, log_text);
     Message_free(done_msg);
+
+    if (*done_left <= 0) {
+        Unit_free(self);
+        exit(EXIT_SUCCESS);
+    }
 }
 
-//void job(Unit* self, char* log_text) {
-//    for (int i = 1; i <= n_iter; i++) {
-//        create_log_text(log_text, log_loop_operation_fmt, self->lid, i, n_iter);
-//        if (mutex_flag) {
-//            request_cs(self);
-//        }
-//        print(log_text);
-//        if (mutex_flag) {
-//            release_cs(self);
-//        }
-//    }
-//}
+int request_cs(const void* self) {
+    Unit* this = (Unit*) self;
+    inc_lamport_time();
+    Message* msg = Message_new(CS_REQUEST, "", 0);
+    if (send_multicast(this, msg) != 0) {
+        perror("send_multicast");
+        return -1;
+    }
+    cs_request* request = malloc(sizeof(cs_request));
+    request->time = msg->s_header.s_local_time;
+    request->lid = this->lid;
+    enqueue(this->que, request);
+//    printf("process %d - insert self %d,%d: ", this->lid, request->lid, request->time);
+//    queue_print(this->que);
+//    printf("process %d - request_cs\n", this->lid);
+    return 0;
+}
+
+int release_cs(const void* self) {
+    Unit* this = (Unit*) self;
+//    cs_request* request = peek(this->que);
+//    printf("process %d - remove self %d,%d: ", this->lid, request->lid, request->time);
+//    queue_print(this->que);
+    dequeue(this->que);
+    inc_lamport_time();
+    Message* msg = Message_new(CS_RELEASE, "", 0);
+    if (send_multicast(this, msg) != 0) {
+        perror("send_multicast");
+        return -1;
+    }
+//    printf("process %d - release_cs\n", this->lid);
+    return 0;
+}
+
+int reply_cs(const void* self, cs_request* request) {
+    Unit* this = (Unit*) self;
+    enqueue(this->que, request);
+//    printf("process %d - insert alien %d,%d: ", this->lid, request->lid, request->time);
+//    queue_print(this->que);
+    inc_lamport_time();
+    Message* msg = Message_new(CS_REPLY, "", 0);
+    if (send(this, request->lid, msg) != 0) {
+        perror("send");
+        return -1;
+    }
+    return 0;
+}
+
+void check_cs_enter
+        (Unit* self, Message* in_msg, cs_request** last_request, int* replies_left, int iters_total,
+         int* iters_left, FILE* log_file, int* done_left, int* replies_mask) {
+//    printf("%d checks cs enter\n", self->lid);
+    if (*last_request != NULL) {
+        char log_text[MAX_PAYLOAD_LEN];
+
+        cs_request* que_top = peek(self->que);
+        if ((*replies_left <= 0) && (que_top->lid == (*last_request)->lid)) {
+//            printf("process %d - enter cs\n", self->lid);
+            create_log_text(log_text, log_loop_operation_fmt, self->lid,
+                            iters_total - *iters_left + 1, iters_total);
+            print(log_text);
+            (*iters_left)--;
+            release_cs(self);
+//            printf("process %d - check iters left: %d\n", self->lid, *iters_left);
+
+            free(*last_request);
+            *last_request = NULL;
+            if (*iters_left <= 0)
+                send_done(self, log_file, done_left);
+
+        }
+    }
+}
 
 void proc_main(Unit* self, FILE* log_file) {
     char log_text[MAX_PAYLOAD_LEN];
     int started_left, done_left;
-    int is_parent = self->lid == PARENT_ID;
-    int n_iter = self->lid * 5;
+    int is_parent = (self->lid == PARENT_ID);
+    cs_request* last_request = NULL;
+    int replies_total = self->n_nodes - 2;
+    int replies_left = replies_total;
+    int iters_total = self->lid*5;
+    int iters_left = iters_total;
+    int* replies_mask = calloc(self->n_nodes - 1, sizeof(int));
+
+    Message* in_msg;
 
     if (is_parent) {
         started_left = done_left = self->n_nodes - 1;
     } else {
         started_left = done_left = self->n_nodes - 2;
     }
-
-
-    Message* in_msg;
 
     // Timeouts
     struct timespec tw = {0, WAIT_TIME_NS};
@@ -90,29 +160,97 @@ void proc_main(Unit* self, FILE* log_file) {
         if (receive_any(self, in_msg) == 0) {
             switch (in_msg->s_header.s_type) {
                 case STARTED:
+//                    printf("process %d - got STARTED from %d\n", self->lid, self->last_message_lid);
                     started_left--;
                     if (started_left == 0) {
                         create_log_text(log_text, log_received_all_started_fmt, get_lamport_time(), self->lid);
                         log_msg(log_file, log_text);
-                        send_done(self, log_file);
+                        if (is_parent) self->done = 1;
                     }
                     break;
                 case DONE:
+//                    printf("process %d - got DONE from %d\n", self->lid, self->last_message_lid);
                     done_left--;
+//                    printf("process %d - done left: %d\n", self->lid, done_left);
                     if (done_left == 0) {
                         create_log_text(log_text, log_received_all_done_fmt, get_lamport_time(), self->lid);
                         log_msg(log_file, log_text);
-                        Unit_free(self);
-                        return;
+                        if (self->done == 1) {
+//                            printf("process %d - EXIT\n", self->lid);
+                            Unit_free(self);
+                            exit(EXIT_SUCCESS);
+                        }
                     }
                     break;
+                case CS_REQUEST:
+//                    printf("process %d - got CS_REQUEST from %d\n", self->lid, self->last_message_lid);
+                    if (!is_parent) {
+                        cs_request* request = malloc(sizeof(cs_request));
+                        request->time = in_msg->s_header.s_local_time;
+                        request->lid = self->last_message_lid;
+                        reply_cs(self, request);
+                    }
+                    break;
+                case CS_RELEASE:
+//                    printf("process %d - got CS_RELEASE from %d, ", self->lid, self->last_message_lid);
+                    if (!is_parent) {
+                        cs_request* request = peek(self->que);
+//                        printf("process %d - remove alien %d,%d: ", self->lid, request->lid, request->time);
+//                        queue_print(self->que);
+                        request = dequeue(self->que);
+                        if (request->lid != self->last_message_lid) {
+                            fprintf(stderr, "%d sees wrong local id at dequeue: %d\n", self->lid, request->lid);
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                    break;
+                case CS_REPLY: {
+//                    printf("process %d - got CS_REPLY from %d\n", self->lid, self->last_message_lid);
+                    if (!is_parent) {
+                        if (!last_request) {
+                            fprintf(stderr, "%d got cs reply from %d, which wasn't requested\n", self->lid,
+                                    self->last_message_lid);
+                            exit(EXIT_FAILURE);
+                        } else {
+                            if (in_msg->s_header.s_local_time > last_request->time ||
+                                (in_msg->s_header.s_local_time == last_request->time
+                                 && self->last_message_lid > self->lid)) {
+                                if (replies_mask[self->last_message_lid] == 0) {
+                                    replies_left--;
+                                    replies_mask[self->last_message_lid] = 1;
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
                 default:
-                    fprintf(stderr, "Process %d: bad message type %d\n",
+                    fprintf(stderr, "Process %d: unexpected message type %d\n",
                             self->lid, in_msg->s_header.s_type);
                     exit(EXIT_FAILURE);
             }
+//            printf("process %d - last_request: %p\n", self->lid, last_request);
+            if (last_request) {
+                check_cs_enter(self, in_msg,
+                               &last_request, &replies_left,
+                               iters_total, &iters_left, log_file, &done_left, replies_mask);
+            }
         } else {
             if (errno == EAGAIN) {
+                // do job in meantime
+//                printf("%d does job in meantime, done_left=%d, iters_left=%d\n", self->lid, done_left, iters_left);
+                if (!last_request && !is_parent && (started_left <= 0) && (iters_left > 0)) {
+                    request_cs(self);
+                    last_request = malloc(sizeof(cs_request));
+                    last_request->lid = self->lid;
+                    last_request->time = get_lamport_time();
+                    replies_left = replies_total;
+                    for (int i = 0; i < self->n_nodes; i++) {
+                        replies_mask[i] = 0;
+                    }
+                }
+
+                // wait to lower CPU load
                 nanosleep(&tw, &tr);
                 if (TIMEOUTS) {
                     timeout_ns -= WAIT_TIME_NS;
@@ -173,7 +311,7 @@ int main(int argc, char** argv) {
             if (to == from) continue;
             if (pipe(pipes[from][to]) < 0) {
                 perror("pipe");
-                exit(-1);
+                exit(EXIT_FAILURE);
             }
 
             // Set read pipes to nonblock mode

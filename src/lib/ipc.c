@@ -9,7 +9,7 @@
 #include "entity.h"
 #include <time.h>
 #include "lamp_time.h"
-#include "ipc_utils.h"
+#include "utils.h"
 
 int send(void* self, local_id dst, const Message* msg) {
     Unit* me = self;
@@ -42,6 +42,7 @@ int receive(void* self, local_id from, Message* msg) {
     if (read(fd, &msg->s_header, sizeof(MessageHeader)) <= 0) {
         return -1;
     } else if (msg->s_header.s_payload_len != 0) {
+        // have to wait for the payload if we got the header
         struct timespec tw = {0, WAIT_TIME_NS};
         struct timespec tr;
         unsigned long long timeout_ns = TIMEOUT_NS;
@@ -80,7 +81,10 @@ int receive_any(void* self, Message* msg) {
         if (receive(me, (local_id) from, msg) < 0) {
             if (errno == EAGAIN) continue;
             else return -1;
-        } else return 0;
+        } else {
+            me->last_message_lid = from;
+            return 0;
+        }
     }
     return -1;
 }

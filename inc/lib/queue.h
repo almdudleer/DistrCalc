@@ -36,4 +36,6 @@ int enqueue(queue* que, cs_request* element);
 
 cs_request* peek(queue* que);
 
+void queue_print(queue* que);
+
 #endif //PAS_QUEUE_H
