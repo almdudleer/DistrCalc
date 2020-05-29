@@ -50,9 +50,8 @@ Unit* Unit_new(int lid, int n_nodes, int*** pipes, FILE* log_file) {
 
     self->done = 0;
     self->last_msg_from = 0;
-    self->que = Queue_new();
-    self->replies_mask = calloc(n_nodes, sizeof(int));
-    self->deferred_replies = calloc(n_nodes, sizeof(int));
+    self->replies_mask = calloc(n_nodes + 1, sizeof(int));
+    self->deferred_replies = calloc(n_nodes + 1, sizeof(int));
     self->last_request = NULL;
 
     self->limits = malloc(sizeof(UnitLimits));
@@ -68,7 +67,6 @@ Unit* Unit_new(int lid, int n_nodes, int*** pipes, FILE* log_file) {
 }
 
 void Unit_free(Unit* self) {
-    Queue_free(self->que);
     free(self->replies_mask);
     free(self->limits);
     free(self);

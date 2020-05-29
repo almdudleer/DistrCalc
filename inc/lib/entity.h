@@ -6,15 +6,15 @@
 #define PA1_SELF_H
 
 #include <stdio.h>
+#include <stddef.h>
 #include "ipc.h"
-#include "queue.h"
 
 typedef struct Unit Unit;
 typedef struct UnitLimits UnitLimits;
+typedef struct CsRequest CsRequest;
 
 struct Unit {
     int*** pipes;
-    Queue* que;
     int n_nodes;
     local_id lid;
     int done;
@@ -36,6 +36,11 @@ struct UnitLimits {
     int iters_total;
     int replies_left;
     int replies_total;
+};
+
+struct CsRequest {
+    local_id lid;
+    timestamp_t time;
 };
 
 Unit* Unit_new(int lid, int n_nodes, int*** pipes, FILE* log_file);

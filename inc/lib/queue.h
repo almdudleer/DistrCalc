@@ -7,18 +7,13 @@
 #include <stddef.h>
 #include <stdio.h>
 #include "ipc.h"
+#include "entity.h"
 
 typedef struct Queue Queue;
 typedef struct node node;
-typedef struct CsRequest CsRequest;
-
-struct CsRequest {
-    local_id lid;
-    timestamp_t time;
-};
 
 struct node {
-    CsRequest* value;
+    struct CsRequest* value;
     node* next;
 };
 
@@ -30,7 +25,7 @@ Queue* Queue_new();
 
 void Queue_free(Queue* que);
 
-CsRequest* dequeue(Queue* que);
+struct CsRequest* dequeue(Queue* que);
 
 int enqueue(Queue* que, CsRequest* element);
 

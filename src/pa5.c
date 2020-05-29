@@ -14,7 +14,6 @@
 #include "banking.h"
 #include "utils.h"
 #include "pa2345.h"
-#include "queue.h"
 #include "message_processing.h"
 
 
@@ -29,8 +28,7 @@ void critical_section(Unit* self) {
 }
 
 int seize_cs(Unit* self) {
-    CsRequest* que_top = peek(self->que);
-    if ((self->limits->replies_left == 0) && (que_top->lid == self->lid)) {
+    if (self->limits->replies_left == 0) {
         return 1;
     }
     return 0;
@@ -42,20 +40,9 @@ void job(Unit* self) {
             if (seize_cs(self)) {
                 critical_section(self);
                 release_cs(self);
-                free(self->last_request);
-                self->last_request = NULL;
             }
         } else {
-
             request_cs(self);
-            self->last_request = malloc(sizeof(CsRequest));
-            self->last_request->lid = self->lid;
-            self->last_request->time = get_lamport_time();
-            self->limits->replies_left = self->limits->replies_total;
-            for (int i = 0; i < self->n_nodes; i++) {
-                self->replies_mask[i] = 0;
-            }
-
         }
     } else {
         critical_section(self);
@@ -88,12 +75,6 @@ void proc_main(Unit* self) {
                 case CS_REQUEST: {
                     if (!self->is_parent && mutex_flag) {
                         handle_cs_request(self, in_msg);
-                    }
-                    break;
-                }
-                case CS_RELEASE: {
-                    if (!self->is_parent && mutex_flag) {
-                        handle_cs_release(self);
                     }
                     break;
                 }

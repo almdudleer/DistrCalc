@@ -13,6 +13,15 @@
 #include <string.h>
 #include "message_processing.h"
 
+int req_greater(CsRequest r1, CsRequest r2) {
+    if (r1.time > r2.time ||
+        (r1.time == r2.time
+         && r1.lid > r2.lid))
+        return 1;
+    else
+        return 0;
+}
+
 void send_started(Unit* self) {
     char log_text[MAX_PAYLOAD_LEN];
 
@@ -51,31 +60,33 @@ int request_cs(const void* self) {
         perror("send_multicast");
         return -1;
     }
-    CsRequest* request = malloc(sizeof(CsRequest));
-    request->time = msg->s_header.s_local_time;
-    request->lid = this->lid;
-    enqueue(this->que, request);
+    this->last_request = malloc(sizeof(CsRequest));
+    this->last_request->lid = this->lid;
+    this->last_request->time = get_lamport_time();
+    this->limits->replies_left = this->limits->replies_total;
+    for (int i = 0; i < this->n_nodes; i++) {
+        this->replies_mask[i] = 0;
+    }
     return 0;
 }
 
 int release_cs(const void* self) {
     Unit* this = (Unit*) self;
-    dequeue(this->que);
+    free(this->last_request);
+    this->last_request = NULL;
     inc_lamport_time();
-    Message* msg = Message_new(CS_RELEASE, "", 0);
-    if (send_multicast(this, msg) != 0) {
-        perror("send_multicast");
-        return -1;
+    for (int i = 1; i <= this->n_nodes; i++) {
+        if (this->deferred_replies[i] == 1) {
+            reply_cs(this, i);
+        }
     }
     return 0;
 }
 
-int reply_cs(const void* self, CsRequest* request) {
+int reply_cs(const void* self, local_id to) {
     Unit* this = (Unit*) self;
-    enqueue(this->que, request);
-    inc_lamport_time();
     Message* msg = Message_new(CS_REPLY, "", 0);
-    if (send(this, request->lid, msg) != 0) {
+    if (send(this, to, msg) != 0) {
         perror("send");
         return -1;
     }
@@ -102,27 +113,20 @@ void handle_done(Unit* self) {
 }
 
 void handle_cs_reply(Unit* self, Message* in_msg) {
-    if (in_msg->s_header.s_local_time > self->last_request->time ||
-        (in_msg->s_header.s_local_time == self->last_request->time
-         && self->last_msg_from > self->lid)) {
-        if (self->replies_mask[self->last_msg_from] == 0) {
-            self->limits->replies_left--;
-            self->replies_mask[self->last_msg_from] = 1;
-        }
+    if (self->replies_mask[self->last_msg_from] == 0) {
+        self->limits->replies_left--;
+        self->replies_mask[self->last_msg_from] = 1;
     }
 }
 
 void handle_cs_request(Unit* self, Message* in_msg) {
-    CsRequest* request = malloc(sizeof(CsRequest));
-    request->time = in_msg->s_header.s_local_time;
-    request->lid = self->last_msg_from;
-    reply_cs(self, request);
-}
+    CsRequest request;
+    request.time = in_msg->s_header.s_local_time;
+    request.lid = self->last_msg_from;
 
-void handle_cs_release(Unit* self) {
-    if (!cut(self->que, self->last_msg_from)) {
-        fprintf(stderr, "process %d - couldn't find %d on the queue\n",
-                self->lid, self->last_msg_from);
-        exit(EXIT_FAILURE);
+    if ((self->last_request == NULL) || req_greater(*self->last_request, request)) {
+        reply_cs(self, self->last_msg_from);
+    } else {
+        self->deferred_replies[self->last_msg_from] = 1;
     }
 }

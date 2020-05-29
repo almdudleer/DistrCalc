@@ -2,6 +2,7 @@
 // Created by almdudleer on 28.05.2020.
 //
 #include "queue.h"
+#include "entity.h"
 #include <stddef.h>
 #include <malloc.h>
 
