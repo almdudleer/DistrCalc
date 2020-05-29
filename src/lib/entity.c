@@ -33,7 +33,6 @@ Message* Message_empty() {
     return self;
 }
 
-
 void Message_free(Message* self) {
     free(self);
 }
@@ -53,6 +52,7 @@ Unit* Unit_new(int lid, int n_nodes, int*** pipes, FILE* log_file) {
     self->last_msg_from = 0;
     self->que = Queue_new();
     self->replies_mask = calloc(n_nodes, sizeof(int));
+    self->deferred_replies = calloc(n_nodes, sizeof(int));
     self->last_request = NULL;
 
     self->limits = malloc(sizeof(UnitLimits));

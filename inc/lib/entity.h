@@ -23,6 +23,7 @@ struct Unit {
     local_id last_msg_from;
     CsRequest* last_request;
     int* replies_mask;
+    int* deferred_replies;
     UnitLimits* limits;
 
     FILE* log_file;

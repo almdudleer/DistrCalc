@@ -12,127 +12,13 @@
 #include <time.h>
 #include "entity.h"
 #include "banking.h"
-#include "lamp_time.h"
 #include "utils.h"
 #include "pa2345.h"
 #include "queue.h"
+#include "message_processing.h"
 
 
 static int mutex_flag = 0;
-
-void send_started(Unit* self) {
-    char log_text[MAX_PAYLOAD_LEN];
-
-    timestamp_t time = inc_lamport_time();
-    create_log_text(log_text, log_started_fmt, time, self->lid, getpid(), getppid(), 0);
-
-    Message* started_msg = Message_new(STARTED, log_text, strlen(log_text));
-//    printf("%d sending STARTED: %d\n", self->lid, STARTED);
-    if (send_multicast(self, started_msg) != 0) {
-        perror("send_multicast");
-        exit(EXIT_FAILURE);
-    }
-
-    log_msg(self->log_file, log_text);
-    Message_free(started_msg);
-}
-
-void send_done(Unit* self) {
-    char log_text[MAX_PAYLOAD_LEN];
-    timestamp_t time = inc_lamport_time();
-    create_log_text(log_text, log_done_fmt, time, self->lid, 0);
-    Message* done_msg = Message_new(DONE, log_text, strlen(log_text));
-    if (send_multicast(self, done_msg) < 0) {
-        perror("send_multicast");
-        exit(EXIT_FAILURE);
-    }
-    log_msg(self->log_file, log_text);
-    Message_free(done_msg);
-}
-
-int request_cs(const void* self) {
-    Unit* this = (Unit*) self;
-    inc_lamport_time();
-    Message* msg = Message_new(CS_REQUEST, "", 0);
-    if (send_multicast(this, msg) != 0) {
-        perror("send_multicast");
-        return -1;
-    }
-    CsRequest* request = malloc(sizeof(CsRequest));
-    request->time = msg->s_header.s_local_time;
-    request->lid = this->lid;
-    enqueue(this->que, request);
-    return 0;
-}
-
-int release_cs(const void* self) {
-    Unit* this = (Unit*) self;
-    dequeue(this->que);
-    inc_lamport_time();
-    Message* msg = Message_new(CS_RELEASE, "", 0);
-    if (send_multicast(this, msg) != 0) {
-        perror("send_multicast");
-        return -1;
-    }
-    return 0;
-}
-
-int reply_cs(const void* self, CsRequest* request) {
-    Unit* this = (Unit*) self;
-    enqueue(this->que, request);
-    inc_lamport_time();
-    Message* msg = Message_new(CS_REPLY, "", 0);
-    if (send(this, request->lid, msg) != 0) {
-        perror("send");
-        return -1;
-    }
-    return 0;
-}
-
-void handle_started(Unit* self) {
-    char log_text[MAX_PAYLOAD_LEN];
-    self->limits->started_left--;
-    if (self->limits->started_left == 0) {
-        create_log_text(log_text, log_received_all_started_fmt, get_lamport_time(), self->lid);
-        log_msg(self->log_file, log_text);
-        if (self->is_parent) self->done = 1;
-    }
-}
-
-void handle_done(Unit* self) {
-    char log_text[MAX_PAYLOAD_LEN];
-    self->limits->done_left--;
-    if (self->limits->done_left == 0) {
-        create_log_text(log_text, log_received_all_done_fmt, get_lamport_time(), self->lid);
-        log_msg(self->log_file, log_text);
-    }
-}
-
-void handle_cs_reply(Unit* self, Message* in_msg) {
-    if (in_msg->s_header.s_local_time > self->last_request->time ||
-        (in_msg->s_header.s_local_time == self->last_request->time
-         && self->last_msg_from > self->lid)) {
-        if (self->replies_mask[self->last_msg_from] == 0) {
-            self->limits->replies_left--;
-            self->replies_mask[self->last_msg_from] = 1;
-        }
-    }
-}
-
-void handle_cs_request(Unit* self, Message* in_msg) {
-    CsRequest* request = malloc(sizeof(CsRequest));
-    request->time = in_msg->s_header.s_local_time;
-    request->lid = self->last_msg_from;
-    reply_cs(self, request);
-}
-
-void handle_cs_release(Unit* self) {
-    if (!cut(self->que, self->last_msg_from)) {
-        fprintf(stderr, "process %d - couldn't find %d on the queue\n",
-                self->lid, self->last_msg_from);
-        exit(EXIT_FAILURE);
-    }
-}
 
 void critical_section(Unit* self) {
     char log_text[MAX_PAYLOAD_LEN];
@@ -253,6 +139,8 @@ int main(int argc, char** argv) {
 
     // Define variables to be set from opts
     local_id n_processes;
+    int p_opt_present = 0;
+
 
     // Store opts
     char* endptr;
@@ -268,6 +156,7 @@ int main(int argc, char** argv) {
     while ((opt = getopt_long(argc, argv, "p:", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'p':
+                p_opt_present = 1;
                 n_processes = (local_id) ((int) strtol(optarg, &endptr, 10) + 1);
                 if (n_processes < 2) {
                     fprintf(stderr, "not enough processes: %d", n_processes);
@@ -279,6 +168,11 @@ int main(int argc, char** argv) {
             default:
                 abort();
         }
+    }
+
+    if (!p_opt_present) {
+        perror("-p option is required");
+        exit(EXIT_FAILURE);
     }
 
     // Create pipes
