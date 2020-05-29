@@ -60,6 +60,20 @@ CsRequest* peek(Queue* que) {
         return NULL;
 }
 
+CsRequest* cut(Queue* que, local_id lid) {
+    node* prev = que->head;
+    node* cur = que->head->next;
+    while (cur != NULL) {
+        if (cur->value->lid == lid) {
+            prev->next = cur->next;
+            return cur->value;
+        }
+        prev = cur;
+        cur = cur->next;
+    }
+    return NULL;
+}
+
 void queue_print(Queue* que) {
     node* cur = que->head->next;
     while (cur != NULL) {

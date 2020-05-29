@@ -34,6 +34,8 @@ CsRequest* dequeue(Queue* que);
 
 int enqueue(Queue* que, CsRequest* element);
 
+CsRequest* cut(Queue* que, local_id lid);
+
 CsRequest* peek(Queue* que);
 
 void queue_print(Queue* que);

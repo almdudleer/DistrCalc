@@ -3,20 +3,19 @@
 #endif
 
 #include <string.h>
-#include "entity.h"
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/wait.h>
-#include "banking.h"
-#include "utils.h"
-#include "common.h"
-#include "lamp_time.h"
-#include "pa2345.h"
+#include <wait.h>
 #include <fcntl.h>
 #include <getopt.h>
-#include "queue.h"
 #include <errno.h>
 #include <time.h>
+#include "entity.h"
+#include "banking.h"
+#include "lamp_time.h"
+#include "utils.h"
+#include "pa2345.h"
+#include "queue.h"
 
 
 static int mutex_flag = 0;
@@ -128,9 +127,9 @@ void handle_cs_request(Unit* self, Message* in_msg) {
 }
 
 void handle_cs_release(Unit* self) {
-    CsRequest* request = dequeue(self->que);
-    if (request->lid != self->last_msg_from) {
-        fprintf(stderr, "got release from %d, but %d is first on the queue", self->last_msg_from, request->lid);
+    if (!cut(self->que, self->last_msg_from)) {
+        fprintf(stderr, "process %d - couldn't find %d on the queue\n",
+                self->lid, self->last_msg_from);
         exit(EXIT_FAILURE);
     }
 }

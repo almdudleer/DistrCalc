@@ -8,8 +8,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <malloc.h>
-#include <inc/lib/utils.h>
-#include <inc/pa2345.h>
 
 // ---------------------------------------------------- MESSAGE ----------------------------------------------------- //
 
