@@ -49,8 +49,9 @@ void job(Unit* self) {
     }
 }
 
-void proc_main(Unit* self) {
-    close_bad_pipes(self, self->n_nodes, self->pipes);
+void proc_main(local_id lid, int n_nodes, int*** pipes, FILE* events_log_file) {
+    Unit* self = Unit_new(lid, n_nodes, pipes, events_log_file);
+    close_bad_pipes(self);
 
     Message* in_msg;
 
@@ -183,28 +184,25 @@ int main(int argc, char** argv) {
 
     // Fork child processes
     for (local_id lid = 1; lid < (local_id) n_processes; lid++) {
-        Unit* self = Unit_new(lid, n_processes, pipes, events_log_file);
         switch (fork()) {
             case -1: {
                 perror("fork");
                 exit(EXIT_FAILURE);
             }
             case 0: {
-                proc_main(self);
+                proc_main(lid, n_processes, pipes, events_log_file);
                 exit(EXIT_SUCCESS);
             }
         }
     }
 
-    // Run parent process
-    Unit* parent_unit = Unit_new(PARENT_ID, n_processes, pipes, events_log_file);
-    proc_main(parent_unit);
-
-    // Wait for children
+    // Run parent process and wait for children
+    proc_main(PARENT_ID, n_processes, pipes, events_log_file);
     for (int i = 0; i < n_processes; i++)
         wait(NULL);
 
     // Clean up
     fclose(events_log_file);
+
     return 0;
 }

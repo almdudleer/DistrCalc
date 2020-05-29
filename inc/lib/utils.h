@@ -18,7 +18,7 @@ void create_log_text(char* msg_text, const char* format, ...);
 
 void log_msg(FILE* log_file, char* msg);
 
-void close_bad_pipes(Unit* self, int n_processes, int** const* pipes);
+void close_bad_pipes(Unit* self);
 
 
 #endif //PA1_UTILS_H

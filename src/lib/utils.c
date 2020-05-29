@@ -6,9 +6,11 @@
 #include <unistd.h>
 #include <errno.h>
 
-void close_bad_pipes(Unit* self, int n_processes, int** const* pipes) {
-    for (local_id from = 0; from < (local_id) n_processes; from++) {
-        for (local_id to = 0; to < (local_id) n_processes; to++) {
+void close_bad_pipes(Unit* self) {
+    int** const* pipes = self->pipes;
+    int n_nodes = self->n_nodes;
+    for (local_id from = 0; from < (local_id) n_nodes; from++) {
+        for (local_id to = 0; to < (local_id) n_nodes; to++) {
             if (from != to) {
                 if ((*self).lid == to) {
                     close(pipes[from][to][1]);
