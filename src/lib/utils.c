@@ -5,7 +5,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#include <pa2345.h>
 
 void close_bad_pipes(Unit* self, int n_processes, int** const* pipes) {
     for (local_id from = 0; from < (local_id) n_processes; from++) {

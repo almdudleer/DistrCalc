@@ -8,34 +8,34 @@
 #include <stdio.h>
 #include "ipc.h"
 
-typedef struct queue queue;
+typedef struct Queue Queue;
 typedef struct node node;
-typedef struct cs_request cs_request;
+typedef struct CsRequest CsRequest;
 
-struct cs_request {
+struct CsRequest {
     local_id lid;
     timestamp_t time;
 };
 
 struct node {
-    cs_request* value;
+    CsRequest* value;
     node* next;
 };
 
-struct queue {
+struct Queue {
     node* head;
 };
 
-queue* queue_new();
+Queue* Queue_new();
 
-void queue_free(queue* que);
+void Queue_free(Queue* que);
 
-cs_request* dequeue(queue* que);
+CsRequest* dequeue(Queue* que);
 
-int enqueue(queue* que, cs_request* element);
+int enqueue(Queue* que, CsRequest* element);
 
-cs_request* peek(queue* que);
+CsRequest* peek(Queue* que);
 
-void queue_print(queue* que);
+void queue_print(Queue* que);
 
 #endif //PAS_QUEUE_H

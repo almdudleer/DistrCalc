@@ -45,20 +45,12 @@ int receive(void* self, local_id from, Message* msg) {
         // have to wait for the payload if we got the header
         struct timespec tw = {0, WAIT_TIME_NS};
         struct timespec tr;
-        unsigned long long timeout_ns = TIMEOUT_NS;
         while (1) {
             if (read(fd, &msg->s_payload, msg->s_header.s_payload_len) <= 0) {
                 if (errno != EAGAIN) {
                     return -1;
                 } else {
                     nanosleep(&tw, &tr);
-                    if (TIMEOUTS) {
-                        timeout_ns -= WAIT_TIME_NS;
-                        if (timeout_ns <= 0) {
-                            errno = EBUSY;
-                            return -1;
-                        }
-                    }
                 }
             } else break;
         }
@@ -82,7 +74,7 @@ int receive_any(void* self, Message* msg) {
             if (errno == EAGAIN) continue;
             else return -1;
         } else {
-            me->last_message_lid = from;
+            me->last_msg_from = from;
             return 0;
         }
     }

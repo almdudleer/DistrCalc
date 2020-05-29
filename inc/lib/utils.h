@@ -9,8 +9,6 @@
 #include <stdio.h>
 
 #define WAIT_TIME_NS (200000000 / 2)
-#define TIMEOUT_NS 2000000000
-#define TIMEOUTS 0
 
 // write syscall utility
 int write_nonblock(int fd, char* msg, unsigned long n_bytes);

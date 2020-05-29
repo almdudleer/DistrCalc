@@ -1,14 +1,14 @@
 //
 // Created by almdudleer on 28.05.2020.
 //
-#include <queue.h>
+#include "queue.h"
 #include <stddef.h>
 #include <malloc.h>
 
-queue* queue_new() {
-    queue* que = malloc(sizeof(queue));
+Queue* Queue_new() {
+    Queue* que = malloc(sizeof(Queue));
     if (!que) {
-        perror("queue_new: malloc");
+        perror("Queue_new: malloc");
         return NULL;
     }
     que->head = malloc(sizeof(node));
@@ -17,23 +17,23 @@ queue* queue_new() {
     return que;
 }
 
-void queue_free(queue* que) {
+void Queue_free(Queue* que) {
     free(que);
 }
 
-cs_request* dequeue(queue* que) {
+CsRequest* dequeue(Queue* que) {
     if (que->head->next == NULL) {
         fprintf(stderr, "queue empty\n");
         return NULL;
     }
     node* last_first = que->head->next;
-    cs_request* res = last_first->value;
+    CsRequest* res = last_first->value;
     que->head->next = last_first->next;
     free(last_first);
     return res;
 }
 
-int enqueue(queue* que, cs_request* element) {
+int enqueue(Queue* que, CsRequest* element) {
     node* cur = que->head->next;
     node* prev = que->head;
     while (cur != NULL) {
@@ -53,14 +53,14 @@ int enqueue(queue* que, cs_request* element) {
     return 0;
 }
 
-cs_request* peek(queue* que) {
+CsRequest* peek(Queue* que) {
     if (que->head->next != NULL)
         return que->head->next->value;
     else
         return NULL;
 }
 
-void queue_print(queue* que) {
+void queue_print(Queue* que) {
     node* cur = que->head->next;
     while (cur != NULL) {
         printf("(%d,%d); ", cur->value->lid, cur->value->time);
